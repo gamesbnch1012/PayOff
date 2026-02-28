@@ -10,6 +10,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -71,6 +72,10 @@ import android.widget.Toast;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.common.BitMatrix;
+import com.journeyapps.barcodescanner.BarcodeEncoder;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -98,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
     Button mainButton, bankButton;
-    ImageButton settingsButton, historyButton;
+    ImageButton settingsButton, historyButton, showQRButton;
     SharedPreferences curTransactionDetails, userSettings;
     boolean dialogBeingShown = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true;
     AlertDialog dialog, loadingDialog;
@@ -114,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
     boolean useOnlyLTE = false, showingStats = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
+    String myUPIID;
 
 
     @Override
@@ -144,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
                 .putString("UPI_PIN", "")
                 .putString("REFERENCE_ID", "")
                 .putString("REMARK", "").apply();
+        myUPIID = userSettings.getString("USER_UPI_ID", "");
 
         //checkForAllPermissions();
         startCamera();
@@ -199,6 +206,7 @@ public class MainActivity extends AppCompatActivity {
         ussdSendButton.setEnabled(false);
         settingsButton = findViewById(R.id.settings_button);
         historyButton = findViewById(R.id.history_button);
+        showQRButton = findViewById(R.id.show_qr_button);
         upiIDTextField = findViewById(R.id.upiIDField);
         checkBalButton = findViewById(R.id.bal_button);
         signalDebugText = findViewById(R.id.signal_stats_text);
@@ -253,7 +261,11 @@ public class MainActivity extends AppCompatActivity {
         /*checkBalButton.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                readTransactionHistory();
+                if(!myUPIID.isEmpty()) {
+                    showMyQR();
+                } else {
+                    showNewDialog("USER_UPI_ENTER", false);
+                }
                 return true;
             }
         });*/
@@ -356,6 +368,17 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 readTransactionHistory();
+            }
+        });
+
+        showQRButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(!myUPIID.isEmpty()) {
+                    showMyQR();
+                } else {
+                    showNewDialog("USER_UPI_ENTER", false);
+                }
             }
         });
 
@@ -642,6 +665,35 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
+    void showMyQR(){
+        MultiFormatWriter writer = new MultiFormatWriter();
+
+        if(dialogBeingShown){
+            dialog.dismiss();
+        }
+
+        View dialogBox = getLayoutInflater().inflate(R.layout.user_qr_code, null);
+        dialogBox.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setView(dialogBox);
+
+        ImageView qrImg = dialogBox.findViewById(R.id.qr_code_image);
+        TextView upiIDText = dialogBox.findViewById(R.id.upi_id_text);
+        upiIDText.setText("UPI ID: " + myUPIID);
+
+        try {
+            BitMatrix matrix = writer.encode("upi://pay?pa=" + myUPIID, BarcodeFormat.QR_CODE, 512, 512);
+            BarcodeEncoder encoder = new BarcodeEncoder();
+            Bitmap bitmap = encoder.createBitmap(matrix);
+            qrImg.setImageBitmap(bitmap);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+
+        dialogBeingShown = true;
+        builder.show();
+    }
+
     void scanForSignals(){
         if(ActivityCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -878,6 +930,17 @@ public class MainActivity extends AppCompatActivity {
             firstSmallText.setText("Enter");
             hintText.setText("Enter the card's expiry date without the '/':");
             textBox.setHint("MMYY");
+        } else if(mode.equals("USER_UPI_ENTER")){
+            secondSmallText.setVisibility(View.GONE);
+            secondBigText.setVisibility(View.GONE);
+            hintText.setVisibility(View.VISIBLE);
+            mainButton.setVisibility(View.VISIBLE);
+            mainButton.setText("DONE");
+            firstBigText.setText("UPI ID");
+            firstSmallText.setText("Enter your");
+            hintText.setText("Enter your UPI ID to display your QR:");
+            textBox.setHint("Your UPI ID");
+            textBox.setInputType(InputType.TYPE_CLASS_TEXT);
         }
 
         textBox.postDelayed(() -> {
@@ -971,7 +1034,7 @@ public class MainActivity extends AppCompatActivity {
             } else if(mode.equals("CARD_DIGITS")) {
                 String lastSixDigits = textBox.getText().toString();
                 if (lastSixDigits.length() != 6) {
-                    showToast("Enter only the last 6 digits.", Toast.LENGTH_LONG);
+                    showToast("Enter only the last 6 digits.", Toast.LENGTH_SHORT);
                 } else {
                     curTransactionDetails.edit().putString("CARD_SIX_DIGITS", lastSixDigits).apply();
                     showNewDialog("CARD_EXPIRY", false);
@@ -979,13 +1042,22 @@ public class MainActivity extends AppCompatActivity {
             } else if(mode.equals("CARD_EXPIRY")){
                 String expiryDate = textBox.getText().toString();
                 if(expiryDate.length() != 4){
-                    showToast("Enter only in MMYY format.", Toast.LENGTH_LONG);
+                    showToast("Enter only in MMYY format.", Toast.LENGTH_SHORT);
                 } else {
                     curTransactionDetails.edit().putString("CARD_EXPIRY", expiryDate).apply();
                     ussd.sendUSSDCommand("*99#");
                     showLoadingDialog("Registering app with UPI...");
                     showPaymentProgress("Registering app with UPI...");
                     curTransactionDetails.edit().putString("TIMER_INACTIVE", "1").apply();
+                }
+            } else if(mode.equals("USER_UPI_ENTER")) {
+                String userEnteredUPIID = textBox.getText().toString();
+                if(userEnteredUPIID.contains("@")){
+                    userSettings.edit().putString("USER_UPI_ID", userEnteredUPIID).apply();
+                    myUPIID = userEnteredUPIID;
+                    showMyQR();
+                } else {
+                    showToast("Enter a valid UPI ID", Toast.LENGTH_SHORT);
                 }
             }
         });
@@ -1003,7 +1075,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if(s.length() > 6){
+                if(s.length() > 6 && textBoxIsPassword){
                     textBox.setText(textBox.getText().toString().substring(0,5));
                 }
             }

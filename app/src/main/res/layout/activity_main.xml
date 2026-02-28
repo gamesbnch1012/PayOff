@@ -88,4 +88,17 @@
         app:layout_constraintTop_toBottomOf="@id/settings_button"
         app:srcCompat="@drawable/history_icon_512" />
 
+    <ImageButton
+        android:id="@+id/show_qr_button"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_marginTop="8dp"
+        android:adjustViewBounds="true"
+        android:backgroundTint="#000000"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        app:layout_constraintEnd_toEndOf="@id/history_button"
+        app:layout_constraintTop_toBottomOf="@id/history_button"
+        app:srcCompat="@drawable/qr_code_icon_512" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

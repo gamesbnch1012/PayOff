@@ -330,7 +330,7 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
             stepTimeout.cancel();
-        } else if(curScreenText.contains("Money was not debited. Please enter correct UPI PIN")) {
+        } else if(curScreenText.contains("Money was not debited. Please enter correct UPI PIN") || curScreenText.contains("The entered UPI PIN is incorrect or invalid")) {
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-2").apply();
