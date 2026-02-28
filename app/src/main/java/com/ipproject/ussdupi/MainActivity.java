@@ -23,9 +23,13 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.provider.Settings;
+import android.telecom.PhoneAccountHandle;
+import android.telecom.TelecomManager;
 import android.telephony.CellInfo;
 import android.telephony.CellInfoLte;
 import android.telephony.CellSignalStrengthLte;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.Editable;
 import android.text.InputType;
@@ -45,6 +49,7 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -54,6 +59,7 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.camera2.internal.SynchronizedCaptureSession;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.Preview;
@@ -105,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
     Button mainButton, bankButton;
     ImageButton settingsButton, historyButton, showQRButton;
     SharedPreferences curTransactionDetails, userSettings;
-    boolean dialogBeingShown = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true;
+    boolean dialogBeingShown = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true;
     AlertDialog dialog, loadingDialog;
     private ProcessCameraProvider cameraProvider;
     private WindowManager windowManager;
@@ -120,6 +126,7 @@ public class MainActivity extends AppCompatActivity {
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID;
+    int chosenSIM = -1;
 
 
     @Override
@@ -151,6 +158,16 @@ public class MainActivity extends AppCompatActivity {
                 .putString("REFERENCE_ID", "")
                 .putString("REMARK", "").apply();
         myUPIID = userSettings.getString("USER_UPI_ID", "");
+
+        userSettings.edit().putString("CHOSEN_SIM", "-1").apply();
+
+        if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
+            chosenSIM = 0;
+        } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("2")){
+            chosenSIM = 1;
+        } else {
+            checkSIMs();
+        }
 
         //checkForAllPermissions();
         startCamera();
@@ -463,6 +480,10 @@ public class MainActivity extends AppCompatActivity {
             locationPermission = false;
         }
 
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)!=PackageManager.PERMISSION_GRANTED){
+            readPhoneStatePermission = false;
+        }
+
         //accessibility permission
         if(!isAccessibilityServiceEnabled()){
             accessibilityPermission = false;
@@ -482,17 +503,89 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Enable the setting for 'PayOff' to continue", Toast.LENGTH_LONG).show();
             drawOverOtherAppsPermission = true;
         } else if(!cameraPermission){
-            showToast("Allow the camera permission", Toast.LENGTH_SHORT);
+            showToast("Allow all these permissions", Toast.LENGTH_SHORT);
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 102);
             cameraPermission = true;
         } else if(!callPermission){
-            showToast("Allow the call permission", Toast.LENGTH_SHORT);
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, 101);
             callPermission = true;
         } else if(!locationPermission){
-            showToast("Allow precise location permission", Toast.LENGTH_SHORT);
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 103);
             locationPermission = true;
+        } else if(!readPhoneStatePermission){
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, 103);
+            readPhoneStatePermission = true;
+        }
+    }
+
+    void checkSIMs(){
+        System.out.println("Initiated SIM checking");
+        int simCount = 1;
+        //SubscriptionManager sm = (SubscriptionManager) getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        SubscriptionManager sm = getSystemService(SubscriptionManager.class);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            System.out.println("Phone permission granted");
+            List<SubscriptionInfo> activeSubscriptions = sm.getActiveSubscriptionInfoList();
+            if(activeSubscriptions!=null){
+                simCount = activeSubscriptions.size();
+                System.out.println("SIMs found: " + simCount);
+            } else {
+                showToast("No SIMs found. This app needs at least one SIM", Toast.LENGTH_LONG);
+                System.exit(0);
+            }
+            if(simCount>1){
+                chosenSIM = Integer.parseInt(userSettings.getString("CHOSEN_SIM", "-1"));
+                System.out.println("The SIM to be used is saved as: " + chosenSIM);
+                if(chosenSIM==-1){
+                    System.out.println("SIM isn't picked yet. Prompting the user to select...");
+                    if(dialogBeingShown){
+                        dialog.dismiss();
+                    }
+
+                    View dialogBox = getLayoutInflater().inflate(R.layout.sim_selector, null);
+                    dialogBox.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                    builder.setView(dialogBox);
+                    final AlertDialog simDialog = builder.create();
+
+                    RadioButton[] simradio = {dialogBox.findViewById(R.id.sim_1_radio), dialogBox.findViewById(R.id.sim_2_radio)};
+                    Button saveButton = dialogBox.findViewById(R.id.sim_selector_button);
+
+                    for (SubscriptionInfo info : activeSubscriptions) {
+                        int slotIndex = info.getSimSlotIndex();
+                        simradio[slotIndex].setText("SIM " + slotIndex + ": " + info.getCarrierName().toString());
+                    }
+
+                    saveButton.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            if(simradio[0].isChecked()){
+                                userSettings.edit().putString("CHOSEN_SIM", "1").apply();
+                                chosenSIM = 0;
+                                simDialog.dismiss();
+                            } else if(simradio[1].isChecked()){
+                                userSettings.edit().putString("CHOSEN_SIM", "2").apply();
+                                chosenSIM = 1;
+                                simDialog.dismiss();
+                            } else {
+                                showToast("Select one SIM", Toast.LENGTH_SHORT);
+                            }
+                        }
+                    });
+                    simDialog.show();
+                } else {
+                    if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
+                        chosenSIM = 0;
+                    } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("2")){
+                        chosenSIM = 1;
+                    }
+                    System.out.println("Dual SIM detected. The sim being used: " + chosenSIM);
+                }
+            } else {
+                chosenSIM = 0;
+            }
+        } else {
+            System.out.println("Phone permission not granted");
         }
     }
 
@@ -690,7 +783,6 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-        dialogBeingShown = true;
         builder.show();
     }
 
@@ -992,6 +1084,10 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "Enter a valid amount.", Toast.LENGTH_SHORT).show();
                 }
             } else if(mode.equals("PIN") || mode.equals("CHECK_BAL_PIN")){
+                if(chosenSIM==-1){
+                    checkSIMs();
+                    return;
+                }
                 System.out.println("-----------------PAYMENT INITIATED-------------------");
                 String newPIN = textBox.getText().toString();
                 secondBigText.setTextSize(40);
@@ -1083,12 +1179,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void makeCallToNumber(String number){
-        String encodedNumber = Uri.encode(number);
-        Uri uri = Uri.parse("tel:" + encodedNumber);
+        TelecomManager telecomManager = (TelecomManager) getSystemService(Context.TELECOM_SERVICE);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            List<PhoneAccountHandle> handles = telecomManager.getCallCapablePhoneAccounts();
+            String encodedNumber = Uri.encode(number);
+            PhoneAccountHandle selectedHandle = handles.get(chosenSIM);
+            Uri uri = Uri.parse("tel:" + encodedNumber);
 
-        Intent intent = new Intent(Intent.ACTION_CALL, uri);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(intent);
+            Intent intent = new Intent(Intent.ACTION_CALL, uri);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, selectedHandle);
+            startActivity(intent);
+        } else {
+            System.out.println("READ_PHONE_STATE not granted.");
+        }
     }
 
 
@@ -1376,6 +1480,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }, 250);
             curTransactionDetails.edit().putString("UPI_ID", "0").apply();
+            upiIDTextField.clearFocus();
             startCamera();
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override
