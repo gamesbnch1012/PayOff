@@ -1,6 +1,6 @@
 Steps to install this app for testing:
 
-1. Download the APK from the latest release and don't install it yet.
+1. Download the APK from the latest release [found here](https://github.com/gamesbnch1012/PayOff/releases) and don't install it yet.
 2. Open Play Store -> Tap on your profile on top-right corner -> Tap on Play Protect -> Tap on the settings icon on top-right -> Turn off 'Scan apps with Play Protect' -> Tap on 'Pause'
 3. Install the APK you downloaded. If asked, allow permission to install APKs from external sources. Don't open the app yet.
 4. Open the app's info page by pressing and holding the app -> Tap app info -> Tap on the three dots on top-right corner -> Tap on 'Allow restricted settings'
