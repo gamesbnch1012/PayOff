@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
     Button mainButton, bankButton;
-    ImageButton settingsButton, historyButton, showQRButton;
+    ImageButton settingsButton, historyButton, showQRButton, favouritesButton;
     SharedPreferences curTransactionDetails, userSettings;
     boolean dialogBeingShown = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true;
     AlertDialog dialog, loadingDialog;
@@ -224,6 +224,7 @@ public class MainActivity extends AppCompatActivity {
         settingsButton = findViewById(R.id.settings_button);
         historyButton = findViewById(R.id.history_button);
         showQRButton = findViewById(R.id.show_qr_button);
+        favouritesButton = findViewById(R.id.favourites_button);
         upiIDTextField = findViewById(R.id.upiIDField);
         checkBalButton = findViewById(R.id.bal_button);
         signalDebugText = findViewById(R.id.signal_stats_text);
@@ -396,6 +397,13 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     showNewDialog("USER_UPI_ENTER", false);
                 }
+            }
+        });
+
+        favouritesButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showToast("Favourites is coming soon...", Toast.LENGTH_LONG);
             }
         });
 
@@ -1071,6 +1079,17 @@ public class MainActivity extends AppCompatActivity {
                 //curTransactionDetails.edit().putString("UPI_ID", "0").apply();
                 //upiIDTextField.setText("");
                 //upiIDReadFromQR = "";
+            }
+        });
+
+        builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                System.out.println("User dismissed the dialog. Clearing current transaction info...");
+                curTransactionDetails.edit().remove("UPI_ID")
+                        .remove("AMOUNT")
+                        .remove("UPI_PIN")
+                        .remove("REMARK").apply();
             }
         });
 

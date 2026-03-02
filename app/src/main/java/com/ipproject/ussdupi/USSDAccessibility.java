@@ -352,7 +352,7 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-4").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             stepTimeout.cancel();
-        } else if(curScreenText.contains("PSP IS NOT REGISTERED")){
+        } else if(curScreenText.contains("PSP IS NOT REGISTERED") || curScreenText.contains("the entered UPI ID is invalid")){
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-6").apply();
