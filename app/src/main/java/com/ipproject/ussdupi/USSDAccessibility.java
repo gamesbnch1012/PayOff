@@ -1,7 +1,10 @@
 package com.ipproject.ussdupi;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
 import android.net.Uri;
@@ -36,10 +39,11 @@ public class USSDAccessibility extends AccessibilityService {
     String remark = "";
     String payeeName = "";
     String upiPIN = "";
-    boolean reallyPay = true;
+    boolean reallyPay = true, accessibilityEnabled = false;
     AccessibilityNodeInfo source;
     ProgressBar progressBar;
     CountDownTimer stepTimeout;
+
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -66,10 +70,14 @@ public class USSDAccessibility extends AccessibilityService {
             }
         };
 
-        /*if(userSettings.getString("ACCESSIBILITY_ACTIVE", "0").equals("false")){
+        ValuePassHelper.sharedValue.observeForever(newValue -> {
+            accessibilityEnabled = Boolean.parseBoolean(newValue);
+        });
+
+        if(!accessibilityEnabled){
             Log.d("Accessibility", "Accessibility event occurred, but ignored");
             return;
-        }*/
+        }
 
         for (AccessibilityWindowInfo window : windows) {
             int type = window.getType();

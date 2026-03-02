@@ -1,11 +1,7 @@
 package com.ipproject.ussdupi;
 
-public class ValuePassHelper {
-    String upiID = "", amount = "", upiPIN = "";
+import androidx.lifecycle.MutableLiveData;
 
-    public void setValues(String upiID, String amount, String upiPIN){
-        this.upiID = upiID;
-        this.amount = amount;
-        this.upiPIN = upiPIN;
-    }
+public class ValuePassHelper {
+    public static MutableLiveData<String> sharedValue = new MutableLiveData<>("");
 }
