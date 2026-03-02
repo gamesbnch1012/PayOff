@@ -66,7 +66,8 @@ public class USSDAccessibility extends AccessibilityService {
             }
         };
 
-        /*if(userSettings.getString("ACCESSIBILITY_ACTIVE", "0").equals("0")){
+        /*if(userSettings.getString("ACCESSIBILITY_ACTIVE", "0").equals("false")){
+            Log.d("Accessibility", "Accessibility event occurred, but ignored");
             return;
         }*/
 
@@ -89,7 +90,7 @@ public class USSDAccessibility extends AccessibilityService {
                     String result = entireText.toString().trim();
                     if (!result.isEmpty() && !result.equals(lastReadText)) {
                         lastReadText = result;
-                        Log.d("USSD_SERVICE", "Detected Content: " + result);
+                        System.out.println("Accessibility detected content: " + result);
                         performNextStep(result, source);
                     }
                 }

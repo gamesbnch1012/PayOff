@@ -151,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
         curTransactionDetails = getSharedPreferences("TRANSACTION_DATA", MODE_PRIVATE);
         userSettings = getSharedPreferences("USER_SETTINGS", MODE_PRIVATE);
         curTransactionDetails.edit().clear().apply();
-        userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "1").apply();
+        //userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "1").apply();
         curTransactionDetails.edit().putString("AMOUNT", "")
                 .putString("PAYEE_NAME", "")
                 .putString("UPI_PIN", "")
@@ -433,6 +433,16 @@ public class MainActivity extends AppCompatActivity {
         /*if(isAccessibilityServiceEnabled())
             ussd.sendUSSDCommand("*99#");*/
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
+        OnBackPressedCallback callback = new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
+                setEnabled(false);
+                finishAffinity();
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(this, callback);
 
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
@@ -887,7 +897,11 @@ public class MainActivity extends AppCompatActivity {
                 //showToast("Bank saved! Try the payment again.", Toast.LENGTH_LONG);
                 //dialog.dismiss();
                 //dialogBeingShown = false;
-                showNewDialog("CARD_DIGITS", false);
+                //showNewDialog("CARD_DIGITS", false);
+                ussd.sendUSSDCommand("*99#");
+                showLoadingDialog("Registering app with UPI...");
+                showPaymentProgress("Registering app with UPI...");
+                curTransactionDetails.edit().putString("TIMER_INACTIVE", "1").apply();
             }
         });
         dialog = builder.create();
@@ -1089,6 +1103,8 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 System.out.println("-----------------PAYMENT INITIATED-------------------");
+                userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "true").apply();
+                System.out.println("Accessibility service started");
                 String newPIN = textBox.getText().toString();
                 secondBigText.setTextSize(40);
                 if(newPIN.length()==4 || newPIN.length()==6) {
@@ -1379,6 +1395,10 @@ public class MainActivity extends AppCompatActivity {
         dialog = builder.create();
         dialog.show();
 
+        userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
+        System.out.println("Stopped accessibility service");
+
+
         curTransactionDetails.edit().putString("AMOUNT", "")
                 .putString("PAYEE_NAME", "")
                 .putString("UPI_PIN", "")
@@ -1494,19 +1514,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    OnBackPressedCallback callback = new OnBackPressedCallback(true) {
-        @Override
-        public void handleOnBackPressed() {
-            userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "0").apply();
-            finishAffinity();
-            System.exit(0);
-        }
-    };
-
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "0").apply();
+        userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
         System.out.println("App left.");
     }
 
@@ -1514,21 +1525,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);
         setIntent(intent);
-        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0)
-            userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "1").apply();
         System.out.println("App brought to foreground.");
-    }
-
-    @Override
-    protected void onResume(){
-        super.onResume();
-        //checkForAllPermissions();
-    }
-
-    @Override
-    protected void onRestart(){
-        super.onRestart();
-        //checkForAllPermissions();
     }
 }
 

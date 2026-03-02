@@ -15,7 +15,6 @@ import androidx.core.content.ContextCompat;
 
 public class USSDActions {
     Context context;
-
     public USSDActions(Context context) {
         this.context = context;
     }
