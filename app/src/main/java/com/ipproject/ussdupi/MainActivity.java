@@ -438,6 +438,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void handleOnBackPressed() {
                 userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
+                broadcastAccessibility(false);
                 setEnabled(false);
                 finishAffinity();
             }
@@ -473,6 +474,11 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }, 1000);
+    }
+
+    void broadcastAccessibility(boolean status){
+        ValuePassHelper.sharedValue.postValue(String.valueOf(status));
+        System.out.println("Set accessibility service enabled to: " + status);
     }
 
     void checkForAllPermissions(){
@@ -1104,6 +1110,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 System.out.println("-----------------PAYMENT INITIATED-------------------");
                 userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "true").apply();
+                broadcastAccessibility(true);
                 System.out.println("Accessibility service started");
                 String newPIN = textBox.getText().toString();
                 secondBigText.setTextSize(40);
@@ -1396,6 +1403,7 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
 
         userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
+        broadcastAccessibility(false);
         System.out.println("Stopped accessibility service");
 
 
@@ -1518,6 +1526,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
         userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
+        //broadcastAccessibility(false);
         System.out.println("App left.");
     }
 
