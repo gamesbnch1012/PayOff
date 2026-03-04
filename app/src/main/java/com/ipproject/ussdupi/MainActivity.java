@@ -111,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
     Button mainButton, bankButton;
     ImageButton settingsButton, historyButton, showQRButton, favouritesButton;
     SharedPreferences curTransactionDetails, userSettings;
-    boolean dialogBeingShown = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true;
+    boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true;
     AlertDialog dialog, loadingDialog;
     private ProcessCameraProvider cameraProvider;
     private WindowManager windowManager;
@@ -1094,7 +1094,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         dialog = builder.create();
-        if(!mode.equals("PAYING")) {
+        if(!mode.equals("PAYING") && !paymentInProgress && !isDestroyed() && !isFinishing()) {
             dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
             dialog.show();
             dialogBeingShown = true;
@@ -1264,6 +1264,7 @@ public class MainActivity extends AppCompatActivity {
         loadingDialog.setCancelable(false);
         loadingDialog.show();
         dialogBeingShown = true;
+        paymentInProgress = true;
         if(checkForFinish!=null){
             checkForFinish.cancel();
         }
@@ -1337,6 +1338,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showFinalDialog(boolean status, String message){
         System.out.println("-----------------PAYMENT FINISHED-------------------");
+        paymentInProgress = false;
         forceUPIID.cancel();
         if(loadingDialog!=null)
             loadingDialog.setCancelable(true);
