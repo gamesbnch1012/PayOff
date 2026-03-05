@@ -10,8 +10,10 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
+import android.hardware.camera2.CameraManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -22,6 +24,7 @@ import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
@@ -37,6 +40,7 @@ import android.text.TextWatcher;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
@@ -56,10 +60,13 @@ import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.internal.SynchronizedCaptureSession;
+import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.Preview;
@@ -111,9 +118,11 @@ public class MainActivity extends AppCompatActivity {
     Button mainButton, bankButton;
     ImageButton settingsButton, historyButton, showQRButton, favouritesButton;
     SharedPreferences curTransactionDetails, userSettings;
-    boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true;
+    PreviewView cameraView;
+    boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
     AlertDialog dialog, loadingDialog;
     private ProcessCameraProvider cameraProvider;
+    private Camera camera;
     private WindowManager windowManager;
     private View onTopView;
     ProgressBar progressBar;
@@ -122,11 +131,19 @@ public class MainActivity extends AppCompatActivity {
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
-    boolean useOnlyLTE = false, showingStats = false;
+    boolean useOnlyLTE = false, showingStats = false, torchOn = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID;
     int chosenSIM = -1;
+    private final ActivityResultLauncher<Void> contactPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.PickContact(),
+            uri -> {
+                if (uri != null) {
+                    handleContactResult(uri);
+                }
+            }
+    );
 
 
     @Override
@@ -220,7 +237,6 @@ public class MainActivity extends AppCompatActivity {
 
         //mainText = findViewById(R.id.main_text);
         ussdSendButton = findViewById((R.id.button));
-        ussdSendButton.setEnabled(false);
         settingsButton = findViewById(R.id.settings_button);
         historyButton = findViewById(R.id.history_button);
         showQRButton = findViewById(R.id.show_qr_button);
@@ -228,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
         upiIDTextField = findViewById(R.id.upiIDField);
         checkBalButton = findViewById(R.id.bal_button);
         signalDebugText = findViewById(R.id.signal_stats_text);
+        cameraView = findViewById(R.id.viewFinder);
         signalDebugText.setVisibility(View.GONE);
         //pinTextField = findViewById(R.id.pinField);
         //amountTextField = findViewById(R.id.amountField);
@@ -250,23 +267,36 @@ public class MainActivity extends AppCompatActivity {
             signalDebugText.setVisibility(View.GONE);
         }
 
+        cameraView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toggleFlash();
+            }
+        });
+
         ussdSendButton.setOnClickListener(v -> {
-            if(!(upiIDTextField.getText().toString().isEmpty() || !upiIDTextField.getText().toString().contains("@"))|| (upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10)){
-            curTransactionDetails.edit().putString("UPI_ID", upiIDTextField.getText().toString()).apply();
-            upiID = upiIDTextField.getText().toString();
-            upiPIN = curTransactionDetails.getString("UPI_PIN", "");
-            amount = curTransactionDetails.getString("AMOUNT", "");
+            if (!(upiIDTextField.getText().toString().isEmpty() || !upiIDTextField.getText().toString().contains("@")) || (upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10)) {
+                curTransactionDetails.edit().putString("UPI_ID", upiIDTextField.getText().toString()).apply();
+                upiID = upiIDTextField.getText().toString();
+                upiPIN = curTransactionDetails.getString("UPI_PIN", "");
+                amount = curTransactionDetails.getString("AMOUNT", "");
             /*curTransactionDetails.edit().putString("UPI_ID", upiID)
                     .putString("AMOUNT", amount)
                     .putString("UPI_PIN", upiPIN)
                     .apply();*/
-            if(!upiIDReadFromQR.isEmpty())
-                upiID = upiIDReadFromQR;
-            System.out.println("Saved the information as following: \nUPI ID: " + upiID + "\nAmount: " + amount + "\nUPI PIN: " + upiPIN);
-            checkForQRScan.cancel();
-            showNewDialog("AMOUNT", false);
+                if (!upiIDReadFromQR.isEmpty())
+                    upiID = upiIDReadFromQR;
+                System.out.println("Saved the information as following: \nUPI ID: " + upiID + "\nAmount: " + amount + "\nUPI PIN: " + upiPIN);
+                checkForQRScan.cancel();
+                showNewDialog("AMOUNT", false);
             /*if(isAccessibilityServiceEnabled())
                ussd.sendUSSDCommand("*99#");*/
+            } else if(upiIDTextField.getText().toString().isEmpty()){
+                if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_DENIED){
+                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, 105);
+                } else {
+                    contactPickerLauncher.launch(null);
+                }
             } else {
                 Toast.makeText(this, "Enter a valid UPI ID", Toast.LENGTH_SHORT).show();
             }
@@ -421,9 +451,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 String string = s.toString();
-                if(string.contains("@") || (string.length() == 10 && string.matches("\\d+"))){
+                if(string.contains("@") || (string.length() == 10 && string.matches("\\d+")) || string.isEmpty()){
+                    if(string.isEmpty())
+                        ussdSendButton.setText("👤");
+                    else
+                        ussdSendButton.setText("→");
                     ussdSendButton.setEnabled(true);
                 } else {
+                    ussdSendButton.setText("→");
                     ussdSendButton.setEnabled(false);
                 }
 
@@ -508,6 +543,10 @@ public class MainActivity extends AppCompatActivity {
             readPhoneStatePermission = false;
         }
 
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)!=PackageManager.PERMISSION_GRANTED){
+            contactsPermission = false;
+        }
+
         //accessibility permission
         if(!isAccessibilityServiceEnabled()){
             accessibilityPermission = false;
@@ -537,8 +576,43 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 103);
             locationPermission = true;
         } else if(!readPhoneStatePermission){
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, 103);
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_PHONE_STATE}, 104);
             readPhoneStatePermission = true;
+        } else if(!contactsPermission){
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_CONTACTS}, 105);
+            contactsPermission = true;
+        }
+    }
+
+    void handleContactResult(Uri contactUri){
+        String contactId = "";
+        try (Cursor cursor = getContentResolver().query(contactUri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                contactId = cursor.getString(cursor.getColumnIndexOrThrow(ContactsContract.Contacts._ID));
+            }
+        }
+
+        // 2. Now query the Phone table specifically using that ID
+        if (!contactId.isEmpty()) {
+            String[] projection = {ContactsContract.CommonDataKinds.Phone.NUMBER};
+            String selection = ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?";
+            String[] selectionArgs = {contactId};
+
+            try (Cursor phoneCursor = getContentResolver().query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    null)) {
+
+                if (phoneCursor != null && phoneCursor.moveToFirst()) {
+                    int numberIndex = phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                    String number = phoneCursor.getString(numberIndex).replaceAll("[^0-9+*#]", "");
+                    if(number.startsWith("+91")){
+                        upiIDTextField.setText(number.substring(3));
+                    }
+                }
+            }
         }
     }
 
@@ -957,12 +1031,21 @@ public class MainActivity extends AppCompatActivity {
 
                 // Bind to lifecycle
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+                camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
 
             } catch (Exception e) {
                 Log.e("CAMERA_DEBUG", "Use case binding failed", e);
             }
 
         }, ContextCompat.getMainExecutor(this));
+
+    }
+
+    private void toggleFlash(){
+        if(camera!=null){
+            camera.getCameraControl().enableTorch(!torchOn);
+            torchOn = !torchOn;
+        }
     }
 
     private void pauseCamera(){
