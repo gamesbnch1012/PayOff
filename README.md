@@ -7,6 +7,7 @@ KEEP IN MIND that this app hasn't been completely developed, so it hasn't been t
 The app is currently found to be NOT working in:
 
 1. OxygenOS (OnePlus)
+2. Google Pixels
 
 Proceed with caution. And here are the steps to install this app for testing:
 
