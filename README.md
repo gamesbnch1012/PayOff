@@ -1,4 +1,15 @@
-Steps to install this app for testing:
+KEEP IN MIND that this app hasn't been completely developed, so it hasn't been tested on every single device and is NOT guarented to work on your specific device. All of the tested devices include:
+
+1. NothingOS (Nothing, CMF)
+2. OneUI (Samsung)
+3. Funtouch OS (Vivo)
+
+The app is currently found to be NOT working in:
+
+1. OxygenOS (OnePlus)
+2. Google Pixel
+
+Proceed with caution. And here are the steps to install this app for testing:
 
 1. Download the APK from the latest release [found here](https://github.com/gamesbnch1012/PayOff/releases) and don't install it yet.
 2. Open Play Store -> Tap on your profile on top-right corner -> Tap on Play Protect -> Tap on the settings icon on top-right -> Turn off 'Scan apps with Play Protect' -> Tap on 'Pause'
