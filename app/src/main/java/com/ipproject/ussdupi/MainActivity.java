@@ -131,12 +131,12 @@ public class MainActivity extends AppCompatActivity {
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
-    boolean useOnlyLTE = false, showingStats = false, torchOn = false;
+    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID;
     int chosenSIM = -1;
-    private final ActivityResultLauncher<Void> contactPickerLauncher = registerForActivityResult(
+    private ActivityResultLauncher<Void> contactPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.PickContact(),
             uri -> {
                 if (uri != null) {
@@ -194,12 +194,14 @@ public class MainActivity extends AppCompatActivity {
             public void onFinish() {
                 upiIDReadFromQR = "";
                 String scannedUPIQR = curTransactionDetails.getString("UPI_ID", "0");
-                if(!scannedUPIQR.equals("0") && !dismissedDialog){
+                if(!scannedUPIQR.equals("0") && !dismissedDialog && !paymentInProgress && !triggeredByContactsIntent){
                     ussdSendButton.setEnabled(true);
                     upiIDTextField.setText(scannedUPIQR);
                     upiIDReadFromQR = scannedUPIQR;
                     ussdSendButton.performClick();
+                    System.out.println("MAIN button pressed from QR timer");
                 } else {
+                    //Log.d("D", "QR timer reset!");
                     this.start();
                 }
             }
@@ -274,7 +276,19 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        contactPickerLauncher = registerForActivityResult(
+                new ActivityResultContracts.PickContact(),
+                uri -> {
+                    if (uri != null) {
+                        handleContactResult(uri);
+                    }
+                }
+        );
+
         ussdSendButton.setOnClickListener(v -> {
+            if(!curTransactionDetails.getString("UPI_ID", "").isEmpty()){
+                upiIDTextField.setText(curTransactionDetails.getString("UPI_ID", ""));
+            }
             if (!(upiIDTextField.getText().toString().isEmpty() || !upiIDTextField.getText().toString().contains("@")) || (upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10)) {
                 curTransactionDetails.edit().putString("UPI_ID", upiIDTextField.getText().toString()).apply();
                 upiID = upiIDTextField.getText().toString();
@@ -321,6 +335,7 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setOnClickListener(v -> {
             if(dialogBeingShown){
                 dialog.dismiss();
+                dialogBeingShown = false;
             }
 
             View dialogBox = getLayoutInflater().inflate(R.layout.settings, null);
@@ -462,8 +477,13 @@ public class MainActivity extends AppCompatActivity {
                     ussdSendButton.setEnabled(false);
                 }
 
-                if(string.length() == 10 && string.matches("\\d+")){
+                if(string.length() == 10 && string.matches("\\d+") && !dialogBeingShown && !triggeredByContactsIntent){
                     ussdSendButton.performClick();
+                    System.out.println("MAIN button pressed from text entered in field");
+                } else if(triggeredByContactsIntent){
+                    System.out.println("triggeredByContactsIntent is set to true, ignoring the change in text field...");
+                } else if(dialogBeingShown){
+                    System.out.println("dialogBeingShown is set to true, ignoring the change in text field...");
                 }
             }
         });
@@ -607,9 +627,21 @@ public class MainActivity extends AppCompatActivity {
 
                 if (phoneCursor != null && phoneCursor.moveToFirst()) {
                     int numberIndex = phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+                    System.out.println("Phone number got from intent: " + phoneCursor.getString(numberIndex).replaceAll("[^0-9+*#]", ""));
+                    triggeredByContactsIntent = true;
                     String number = phoneCursor.getString(numberIndex).replaceAll("[^0-9+*#]", "");
                     if(number.startsWith("+91")){
-                        upiIDTextField.setText(number.substring(3));
+                        number = number.substring(3);
+                    }
+                    upiIDTextField.setText(number);
+                    if(number.length() == 10){
+                        curTransactionDetails.edit().putString("UPI_ID", number).apply();
+                        checkForQRScan.cancel();
+                        upiIDReadFromQR = "";
+                        ussdSendButton.setEnabled(true);
+                        upiIDReadFromQR = number;
+                        ussdSendButton.performClick();
+                        System.out.println("MAIN button pressed from Contacts intent");
                     }
                 }
             }
@@ -638,6 +670,7 @@ public class MainActivity extends AppCompatActivity {
                     System.out.println("SIM isn't picked yet. Prompting the user to select...");
                     if(dialogBeingShown){
                         dialog.dismiss();
+                        dialogBeingShown = false;
                     }
 
                     View dialogBox = getLayoutInflater().inflate(R.layout.sim_selector, null);
@@ -800,6 +833,7 @@ public class MainActivity extends AppCompatActivity {
 
         if(dialogBeingShown){
             dialog.dismiss();
+            dialogBeingShown = false;
         }
 
         View dialogBox = getLayoutInflater().inflate(R.layout.transaction_history, null);
@@ -861,6 +895,7 @@ public class MainActivity extends AppCompatActivity {
 
         if(dialogBeingShown){
             dialog.dismiss();
+            dialogBeingShown = true;
         }
 
         View dialogBox = getLayoutInflater().inflate(R.layout.user_qr_code, null);
@@ -1055,6 +1090,7 @@ public class MainActivity extends AppCompatActivity {
     private void showNewDialog(String mode, boolean textBoxIsPassword){
         if(dialogBeingShown && !mode.equals("PAYING")){
             dialog.dismiss();
+            dialogBeingShown = false;
         }
 
         View dialogBox = getLayoutInflater().inflate(R.layout.prompt_sample, null);
@@ -1168,6 +1204,9 @@ public class MainActivity extends AppCompatActivity {
         builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
             @Override
             public void onCancel(DialogInterface dialog) {
+                triggeredByContactsIntent = false;
+                dialogBeingShown = false;
+                upiIDTextField.setText("");
                 System.out.println("User dismissed the dialog. Clearing current transaction info...");
                 curTransactionDetails.edit().remove("UPI_ID")
                         .remove("AMOUNT")
@@ -1234,9 +1273,13 @@ public class MainActivity extends AppCompatActivity {
                         showPaymentProgress("Checking balance...");
                     }
                     showLoadingDialog("Checking balance...");
-                    curTransactionDetails.edit().putString("TRANSACTION_FINISH", "0")
-                            .putString("UPI_ID", upiIDReadFromQR)
-                            .apply();
+                    if(!mode.equals("CHECK_BAL_PIN")) {
+                        curTransactionDetails.edit().putString("TRANSACTION_FINISH", "0")
+                                .putString("UPI_ID", upiIDReadFromQR)
+                                .apply();
+                    } else {
+                        curTransactionDetails.edit().putString("TRANSACTION_FINISH", "0").apply();
+                    }
                     paymentStartTimeout = new CountDownTimer(20000, 1000) {
                         @Override
                         public void onFinish() {
@@ -1422,6 +1465,7 @@ public class MainActivity extends AppCompatActivity {
     private void showFinalDialog(boolean status, String message){
         System.out.println("-----------------PAYMENT FINISHED-------------------");
         paymentInProgress = false;
+        triggeredByContactsIntent = false;
         forceUPIID.cancel();
         if(loadingDialog!=null)
             loadingDialog.setCancelable(true);
@@ -1611,8 +1655,10 @@ public class MainActivity extends AppCompatActivity {
                     checkForAllPermissions();
                 }
             }, 250);
-            curTransactionDetails.edit().putString("UPI_ID", "0").apply();
+            //curTransactionDetails.edit().putString("UPI_ID", "0").apply();
             upiIDTextField.clearFocus();
+            //upiIDTextField.setText("");
+            curTransactionDetails.edit().putString("PAYEE_NAME", "").apply();
             startCamera();
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override
@@ -1621,6 +1667,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }, 1000);
         } else {
+            System.out.println("Main activity focus left.");
             pauseCamera();
             checkForQRScan.cancel();
         }

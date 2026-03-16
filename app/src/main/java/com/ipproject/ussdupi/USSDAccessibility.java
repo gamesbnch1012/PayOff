@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -407,37 +408,43 @@ public class USSDAccessibility extends AccessibilityService {
         }
     }
 
-    private void dontpressButton(String buttonText, AccessibilityNodeInfo rootNode, long delayTime) {
-        if (rootNode == null) return;
+    private void pressButton(String buttonText, AccessibilityNodeInfo rootNode, long delayTime) {
+        if (rootNode == null || buttonText == null) return;
+        //List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(buttonText);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
 
-        List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(buttonText);
+            // 1. Use the REAL Android method to find nodes with that text
+            List<AccessibilityNodeInfo> nodes = rootNode.findAccessibilityNodeInfosByText(buttonText);
 
-        for (AccessibilityNodeInfo node : nodes) {
-            // Double-check that the node is actually clickable
-            if (node.isClickable()) {
-                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.d("USSD_ACTION", "Tapped on node with text: " + buttonText);
-                return; // Exit after the first successful tap
+            if (nodes != null && !nodes.isEmpty()) {
+                for (AccessibilityNodeInfo node : nodes) {
+                    // 2. Iterate up the tree to find the clickable parent
+                    AccessibilityNodeInfo temp = node;
+                    while (temp != null) {
+                        if (temp.isClickable()) {
+                            System.out.println("Found button with text '" + buttonText + "'. Performing click...");
+                            AccessibilityNodeInfo selectedButton = temp;
+                            selectedButton.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                            selectedButton.recycle();
+                        }
+                        AccessibilityNodeInfo parent = temp.getParent();
+                        // Avoid memory leaks by not recycling 'node' yet, but move to parent
+                        temp = parent;
+                    }
+                }
             }
-
-            // If the text itself isn't clickable (like a label inside a button),
-            // try to click its parent
-            AccessibilityNodeInfo parent = node.getParent();
-            if (parent != null && parent.isClickable()) {
-                parent.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.d("USSD_ACTION", "Tapped on parent of text: " + buttonText);
-                return;
-            }
-        }
+        }, delayTime);
     }
 
-    private void pressButton(String buttonText, AccessibilityNodeInfo rootNode, long delayTime) {
+    private void dontpressButton(String buttonText, AccessibilityNodeInfo rootNode, long delayTime) {
         AccessibilityNodeInfo selectedButton = findButtonByText(rootNode, buttonText, "Reply");
         if (selectedButton != null) {
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 System.out.println("Clicking " + buttonText + "...");
                 selectedButton.performAction(AccessibilityNodeInfo.ACTION_CLICK);
             }, delayTime);
+        } else {
+            System.out.println("Failed to find the '" + buttonText + "' button");
         }
     }
 }
