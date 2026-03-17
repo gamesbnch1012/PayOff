@@ -42,6 +42,8 @@ import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AccelerateInterpolator;
@@ -77,7 +79,9 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import android.content.Context;
 import android.widget.Toast;
@@ -152,8 +156,8 @@ public class MainActivity extends AppCompatActivity {
         beginWritingToLog();
         intent = getIntent();
         Uri data = intent.getData();
-        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
+        EdgeToEdge.enable(this);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -193,13 +197,21 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFinish() {
                 upiIDReadFromQR = "";
-                String scannedUPIQR = curTransactionDetails.getString("UPI_ID", "0");
-                if(!scannedUPIQR.equals("0") && !dismissedDialog && !paymentInProgress && !triggeredByContactsIntent){
+                String scannedUPIQR = curTransactionDetails.getString("UPI_ID", "");
+                if(!scannedUPIQR.isEmpty() && !dismissedDialog && !paymentInProgress && !triggeredByContactsIntent){
                     ussdSendButton.setEnabled(true);
                     upiIDTextField.setText(scannedUPIQR);
                     upiIDReadFromQR = scannedUPIQR;
                     ussdSendButton.performClick();
-                    System.out.println("MAIN button pressed from QR timer");
+                    System.out.print("MAIN button pressed from QR timer due to:");
+                    if(!scannedUPIQR.isEmpty())
+                        System.out.println(" scannedUPIQR != 0. Instead, it is: " + scannedUPIQR);
+                    if(!dismissedDialog)
+                        System.out.println(" dismissedDialog false");
+                    if(!paymentInProgress)
+                        System.out.println(" paymentInProgress false");
+                    if(!triggeredByContactsIntent)
+                        System.out.println(" triggeredByContactsIntent false");
                 } else {
                     //Log.d("D", "QR timer reset!");
                     this.start();
@@ -818,6 +830,15 @@ public class MainActivity extends AppCompatActivity {
         currentTransaction.put("time", format.format(date));
 
         historyList.add(0, currentTransaction);
+        if(historyList.size()>=20){
+            Iterator<Map<String, Object>> iterator = historyList.iterator();
+                for(int i=0; i<=historyList.size()-1; i++){
+                    System.out.print("i: " + i);
+                    if(i>=20)
+                        historyList.remove(i);
+                    System.out.print("\n");
+                }
+        }
 
         try(FileWriter writer = new FileWriter(transactionHistory)){
             gson.toJson(historyList, writer);
@@ -1278,6 +1299,7 @@ public class MainActivity extends AppCompatActivity {
                                 .putString("UPI_ID", upiIDReadFromQR)
                                 .apply();
                     } else {
+                        upiIDReadFromQR = "";
                         curTransactionDetails.edit().putString("TRANSACTION_FINISH", "0").apply();
                     }
                     paymentStartTimeout = new CountDownTimer(20000, 1000) {
@@ -1372,6 +1394,7 @@ public class MainActivity extends AppCompatActivity {
         View loadingBox = getLayoutInflater().inflate(R.layout.loading, null);
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setView(loadingBox);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         /*if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ){
             loadingDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);
@@ -1389,6 +1412,30 @@ public class MainActivity extends AppCompatActivity {
         loadingDialog = builder.create();
         loadingDialog.setCancelable(false);
         loadingDialog.show();
+        /*Window window = dialog.getWindow();
+        if (window != null) {
+            // 3. Force the dialog to take up the FULL screen area
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
+
+            // 4. Remove the default dialog background (which has margins)
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+
+            // 5. Tell the DIALOG window to ignore the notch/cutout
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                WindowManager.LayoutParams lp = window.getAttributes();
+                lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                window.setAttributes(lp);
+            }
+            View decorView = window.getDecorView();
+            decorView.setPadding(0, 0, 0, 0);
+
+            // 6. Hide System Bars for this specific dialog window
+            WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(window, decorView);
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        }*/
         dialogBeingShown = true;
         paymentInProgress = true;
         if(checkForFinish!=null){
@@ -1550,6 +1597,20 @@ public class MainActivity extends AppCompatActivity {
         dialog = builder.create();
         dialog.show();
 
+        dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                triggeredByContactsIntent = false;
+                dialogBeingShown = false;
+                upiIDTextField.setText("");
+                System.out.println("Final dialog dismissed. Clearing current transaction info...");
+                curTransactionDetails.edit().remove("UPI_ID")
+                        .remove("AMOUNT")
+                        .remove("UPI_PIN")
+                        .remove("REMARK").apply();
+            }
+        });
+
         userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "false").apply();
         broadcastAccessibility(false);
         System.out.println("Stopped accessibility service");
@@ -1633,6 +1694,11 @@ public class MainActivity extends AppCompatActivity {
                         | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_FULLSCREEN);
+        ViewCompat.setOnApplyWindowInsetsListener(decorView, (v, windowInsets) -> {
+            Insets systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(0, systemBars.top, 0, 0);
+            return WindowInsetsCompat.CONSUMED;
+        });
     }
 
     public void unFullScreenUI(){
@@ -1642,6 +1708,10 @@ public class MainActivity extends AppCompatActivity {
                         | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                         | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                         | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        ViewCompat.setOnApplyWindowInsetsListener(decorView, (v, windowInsets) -> {
+            v.setPadding(0, 0, 0, 0);
+            return WindowInsetsCompat.CONSUMED;
+        });
     }
 
     @Override
