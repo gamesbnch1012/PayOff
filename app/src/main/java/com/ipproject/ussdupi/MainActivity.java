@@ -2,12 +2,14 @@ package com.ipproject.ussdupi;
 
 import android.Manifest;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
@@ -85,7 +87,6 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import android.content.Context;
 import android.widget.Toast;
-
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -94,13 +95,20 @@ import com.google.zxing.MultiFormatWriter;
 import com.google.zxing.common.BitMatrix;
 import com.journeyapps.barcodescanner.BarcodeEncoder;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -110,6 +118,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 //import java.util.logging.Handler;
 //import com.ipproject.ussdupi.USSDActions;
 
@@ -140,11 +151,11 @@ public class MainActivity extends AppCompatActivity {
     Intent intent;
     String myUPIID, phNumURI;
     int chosenSIM = -1;
-    private ActivityResultLauncher<Void> contactPickerLauncher = registerForActivityResult(
-            new ActivityResultContracts.PickContact(),
-            uri -> {
-                if (uri != null) {
-                    handleContactResult(uri);
+    private ActivityResultLauncher<Intent> contactPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == Activity.RESULT_OK && result.getData()!=null) {
+                    handleContactResult(result.getData().getData());
                 }
             }
     );
@@ -289,10 +300,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         contactPickerLauncher = registerForActivityResult(
-                new ActivityResultContracts.PickContact(),
-                uri -> {
-                    if (uri != null) {
-                        handleContactResult(uri);
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == Activity.RESULT_OK && result.getData()!=null) {
+                        handleContactResult(result.getData().getData());
                     }
                 }
         );
@@ -323,7 +334,7 @@ public class MainActivity extends AppCompatActivity {
                 if(ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)==PackageManager.PERMISSION_DENIED){
                     ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE}, 105);
                 } else {
-                    contactPickerLauncher.launch(null);
+                    contactPickerLauncher.launch(new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI));
                 }
             } else {
                 Toast.makeText(this, "Enter a valid UPI ID", Toast.LENGTH_SHORT).show();
@@ -634,10 +645,10 @@ public class MainActivity extends AppCompatActivity {
             String[] selectionArgs = {contactId};
 
             try (Cursor phoneCursor = getContentResolver().query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    contactUri,
                     projection,
-                    selection,
-                    selectionArgs,
+                    null,
+                    null,
                     null)) {
 
                 if (phoneCursor != null && phoneCursor.moveToFirst()) {
@@ -661,6 +672,46 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }
+    }
+
+    void checkForUpdates() throws Exception{
+        System.out.println("Checking for updates...");
+        String currentVersion = "";
+        PackageInfo pInfo = getApplicationContext().getPackageManager()
+                    .getPackageInfo(getApplicationContext().getPackageName(), 0);
+        currentVersion = pInfo.versionName;
+        URL updateURL = new URL("https://api.github.com/repos/gamesbnch1012/payOff/releases/latest");
+        HttpURLConnection connection = (HttpURLConnection) updateURL.openConnection();
+        connection.setRequestMethod("GET");
+        connection.setRequestProperty("User-Agent", "payoff-application");
+        if(connection.getResponseCode()==200){
+            InputStream response = connection.getInputStream();
+            Scanner s = new Scanner(response).useDelimiter("\\A");
+            String result = s.hasNext() ? s.next() : "";
+            JSONObject release = new JSONObject(result);
+            String latestVersion = release.getString("tag_name");
+            System.out.println("Current app version: " + currentVersion + "\nVersion got from GitHub: " + latestVersion);
+            if(Integer.parseInt(latestVersion.substring(4)) > Integer.parseInt(currentVersion.substring(4))){
+                System.out.println("Update detected. Opening the download page...");
+                JSONArray assets = release.getJSONArray("assets");
+                String finalURL = "";
+                for(int i=0; i<assets.length(); i++){
+                    JSONObject asset = assets.getJSONObject(i);
+                    if(asset.getString("name").endsWith(".apk")){
+                        finalURL = asset.getString("browser_download_url");
+                        break;
+                    }
+                }
+                if(!finalURL.isEmpty()){
+                    Intent updateIntent = new Intent(Intent.ACTION_VIEW);
+                    updateIntent.setData(Uri.parse(finalURL));
+                    startActivity(updateIntent);
+                } else {
+                    System.out.println("Failed to get update URL");
+                }
+            }
+        }
+        connection.disconnect();
     }
 
     void checkSIMs(){
@@ -1777,6 +1828,21 @@ public class MainActivity extends AppCompatActivity {
             upiIDTextField.clearFocus();
             //upiIDTextField.setText("");
             curTransactionDetails.edit().putString("PAYEE_NAME", "").apply();
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    ExecutorService executorService = Executors.newSingleThreadExecutor();
+                    executorService.execute(() -> {
+                        try {
+                            checkForUpdates();
+                        } catch (Exception e){
+                            System.out.println("Error occured when checking for updates");
+                            e.printStackTrace();
+                        }
+                    });
+
+                }
+            }, 2000);
             startCamera();
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override
