@@ -73,6 +73,14 @@
         android:textColor="@color/white"
         android:textSize="16sp" />
 
+    <Button
+        android:id="@+id/other_upi_button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:paddingTop="10dp"
+        android:text="Try with other UPI app" />
+
     <Space
         android:layout_width="match_parent"
         android:layout_height="20dp" />

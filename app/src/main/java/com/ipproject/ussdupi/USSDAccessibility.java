@@ -44,6 +44,7 @@ public class USSDAccessibility extends AccessibilityService {
     AccessibilityNodeInfo source;
     ProgressBar progressBar;
     CountDownTimer stepTimeout;
+    boolean timerEnabled = false;
 
 
     @Override
@@ -56,20 +57,6 @@ public class USSDAccessibility extends AccessibilityService {
         StringBuilder entireText = new StringBuilder();
 
         readSharedPreferences();
-
-        stepTimeout = new CountDownTimer(15000, 1000) {
-            @Override
-            public void onFinish() {
-                pressButton("Cancel", source, 1);
-                nextStep = "";
-                curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();
-            }
-
-            @Override
-            public void onTick(long millisUntilFinished) {
-
-            }
-        };
 
         ValuePassHelper.sharedValue.observeForever(newValue -> {
             accessibilityEnabled = Boolean.parseBoolean(newValue);
@@ -100,6 +87,7 @@ public class USSDAccessibility extends AccessibilityService {
                     if (!result.isEmpty() && !result.equals(lastReadText)) {
                         lastReadText = result;
                         System.out.println("Accessibility detected content: " + result);
+                        curTransactionDetails.edit().putString("CUR_SCREEN_TEXT", result).apply();
                         performNextStep(result, source);
                     }
                 }
@@ -143,7 +131,7 @@ public class USSDAccessibility extends AccessibilityService {
         if (windowManager != null && onTopView != null) {
             windowManager.removeView(onTopView);
             onTopView = null;
-            stepTimeout.cancel();
+            timerEnabled = false;
         }
     }
 
@@ -176,6 +164,32 @@ public class USSDAccessibility extends AccessibilityService {
         upiPIN = curTransactionDetails.getString("UPI_PIN", "");
     }
 
+    void stepTimerStart(){
+        timerEnabled = true;
+        stepTimeout = new CountDownTimer(15000, 1000) {
+            @Override
+            public void onFinish() {
+                pressButton("Cancel", source, 1);
+                nextStep = "";
+                String onScreenText = curTransactionDetails.getString("CUR_SCREEN_TEXT", "");
+                if(!onScreenText.isBlank() && !onScreenText.contains("USSD code running") && timerEnabled) {
+                    System.out.println("Payment timed out. The screen text read at that moment: " + onScreenText);
+                    curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();
+                } else {
+                    System.out.println("Timed out, but ignored");
+                }
+            }
+
+            @Override
+            public void onTick(long millisUntilFinished) {
+                if(!timerEnabled){
+                    System.out.println("Timer cancelled!");
+                    this.cancel();
+                }
+            }
+        }.start();
+    }
+
 
     void performNextStep(String curScreenText, AccessibilityNodeInfo rootNode) {
         if (rootNode == null) return;
@@ -189,7 +203,7 @@ public class USSDAccessibility extends AccessibilityService {
                 nextStep = "";
                 curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-5").apply();
                 //hidePaymentProgress();
-                stepTimeout.cancel();
+                timerEnabled = false;
             } else {
                 enterTextInField(userSettings.getString("BANK", "0"), rootNode, 1);
                 pressButton("Send", rootNode, 2);
@@ -216,7 +230,7 @@ public class USSDAccessibility extends AccessibilityService {
             enterTextInField("1", rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "SEND_MENU";
-            stepTimeout.start();
+            stepTimerStart();
         }else if (curScreenText.contains("1. Send Money") && nextStep.isEmpty()) {
             readSharedPreferences();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "0")
@@ -225,9 +239,9 @@ public class USSDAccessibility extends AccessibilityService {
             enterTextInField("1", rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "SEND_MENU";
-            stepTimeout.start();
+            stepTimerStart();
         } else if (curScreenText.contains("1. Send Money") && nextStep.equals("SEND_MENU")) {
-            stepTimeout.cancel();
+            timerEnabled = false;
             nextStep = "";
         } else if(curScreenText.contains("3. UPI ID") && nextStep.equals("SEND_MENU")){
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "17").apply();
@@ -235,9 +249,9 @@ public class USSDAccessibility extends AccessibilityService {
             enterTextInField("3", rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "UPI_ID_ENTER";
-            stepTimeout.start();
+            stepTimerStart();
         }else if (curScreenText.contains("Enter UPI ID.") || curScreenText.contains("Enter Mobile No.") /*&& (nextStep.equals("UPI_ID_ENTER") || nextStep.isEmpty()*/){
-            stepTimeout.cancel();
+            timerEnabled = false;
             readSharedPreferences();
             //progressBar.setProgress(34, true);
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "34").apply();
@@ -245,9 +259,9 @@ public class USSDAccessibility extends AccessibilityService {
             enterTextInField(upiID, rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "AMOUNT_ENTER";
-            stepTimeout.start();
+            stepTimerStart();
         } else if (curScreenText.contains("Enter Amount in Rs.") && nextStep.equals("AMOUNT_ENTER")) {
-            stepTimeout.cancel();
+            timerEnabled = false;
             readSharedPreferences();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "51").apply();
             //progressBar.setProgress(51, true);
@@ -258,9 +272,9 @@ public class USSDAccessibility extends AccessibilityService {
             enterTextInField(amount, rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "REMARK_ENTER";
-            stepTimeout.start();
+            stepTimerStart();
         } else if (curScreenText.contains("Enter a remark (Enter 1 to skip)") && nextStep.equals("REMARK_ENTER")) {
-            stepTimeout.cancel();
+            timerEnabled = false;
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "68").apply();
             //progressBar.setProgress(68, true);
             System.out.println("Detected remark menu.");
@@ -270,9 +284,9 @@ public class USSDAccessibility extends AccessibilityService {
                 enterTextInField(remark, rootNode, 1);
             pressButton("Send", rootNode, 2);
             nextStep = "PIN_ENTER";
-            stepTimeout.start();
+            stepTimerStart();
         } else if (curScreenText.contains("Enter UPI Pin to proceed") || curScreenText.contains("Enter 4  digit UPI PIN") || curScreenText.contains("Enter 6  digit UPI PIN")) {
-            stepTimeout.cancel();
+            timerEnabled = false;
             readSharedPreferences();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "85").apply();
             //progressBar.setProgress(85, true);
@@ -297,7 +311,7 @@ public class USSDAccessibility extends AccessibilityService {
                 pressButton("Send", rootNode, 2);
                 nextStep = "";
             }
-            stepTimeout.start();
+            stepTimerStart();
         } else if(curScreenText.contains("Your UPI PIN is set.  To check balance for your Account")){
             System.out.println("That's the last step for registration!");
             pressButton("Cancel", rootNode, 1);
@@ -319,7 +333,7 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
         } else if (curScreenText.contains("Your account balance is")) {
-            stepTimeout.cancel();
+            timerEnabled = false;
             pressButton("Cancel", rootNode, 1);
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "100").apply();
             //progressBar.setProgress(100, true);
@@ -339,33 +353,33 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-1").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
-            stepTimeout.cancel();
+            timerEnabled = false;
         } else if(curScreenText.contains("Money was not debited. Please enter correct UPI PIN") || curScreenText.contains("The entered UPI PIN is incorrect or invalid")) {
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-2").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
-            stepTimeout.cancel();
+            timerEnabled = false;
         } else if(curScreenText.contains("is not a valid Amount")) {
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-4").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
-            stepTimeout.cancel();
+            timerEnabled = false;
         } else if(curScreenText.contains("PSP IS NOT REGISTERED") || curScreenText.contains("the entered UPI ID is invalid")){
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-6").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
-            stepTimeout.cancel();
+            timerEnabled = false;
         } else if(!curScreenText.contains("USSD code running…") || curScreenText.contains("Connection problem or invalid MMI code")){
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-99").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
-            stepTimeout.cancel();
+            timerEnabled = false;
         }
     }
 

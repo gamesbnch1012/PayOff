@@ -138,7 +138,7 @@ public class MainActivity extends AppCompatActivity {
     boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
-    String myUPIID;
+    String myUPIID, phNumURI;
     int chosenSIM = -1;
     private ActivityResultLauncher<Void> contactPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.PickContact(),
@@ -302,6 +302,8 @@ public class MainActivity extends AppCompatActivity {
                 upiIDTextField.setText(curTransactionDetails.getString("UPI_ID", ""));
             }
             if (!(upiIDTextField.getText().toString().isEmpty() || !upiIDTextField.getText().toString().contains("@")) || (upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10)) {
+                if((upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10))
+                    upiIDTextField.setText(upiIDTextField.getText().toString().concat("@upi"));
                 curTransactionDetails.edit().putString("UPI_ID", upiIDTextField.getText().toString()).apply();
                 upiID = upiIDTextField.getText().toString();
                 upiPIN = curTransactionDetails.getString("UPI_PIN", "");
@@ -490,6 +492,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if(string.length() == 10 && string.matches("\\d+") && !dialogBeingShown && !triggeredByContactsIntent){
+                    upiIDTextField.setText(string.concat("@upi"));
                     ussdSendButton.performClick();
                     System.out.println("MAIN button pressed from text entered in field");
                 } else if(triggeredByContactsIntent){
@@ -833,10 +836,10 @@ public class MainActivity extends AppCompatActivity {
         if(historyList.size()>=20){
             Iterator<Map<String, Object>> iterator = historyList.iterator();
                 for(int i=0; i<=historyList.size()-1; i++){
-                    System.out.print("i: " + i);
+                    //System.out.print("i: " + i);
                     if(i>=20)
                         historyList.remove(i);
-                    System.out.print("\n");
+                    //System.out.print("\n");
                 }
         }
 
@@ -1150,9 +1153,12 @@ public class MainActivity extends AppCompatActivity {
             String displayAmountWithSymbol = "₹" + curTransactionDetails.getString("AMOUNT", "NULL");
             firstBigText.setText(displayAmountWithSymbol);
             firstSmallText.setText("Paying");
-            if(curTransactionDetails.getString("PAYEE_NAME", "").isEmpty())
-                secondBigText.setText(curTransactionDetails.getString("UPI_ID", "NULL"));
-            else
+            if(curTransactionDetails.getString("PAYEE_NAME", "").isEmpty()) {
+                if(curTransactionDetails.getString("UPI_ID", "").contains("@upi"))
+                    secondBigText.setText(curTransactionDetails.getString("UPI_ID", "NULL").substring(0, 10));
+                else
+                    secondBigText.setText(curTransactionDetails.getString("UPI_ID", "NULL"));
+            } else
                 secondBigText.setText(curTransactionDetails.getString("PAYEE_NAME", "NULL"));
             secondBigText.setTextSize(22);
             secondSmallText.setText("to");
@@ -1283,8 +1289,9 @@ public class MainActivity extends AppCompatActivity {
                         if(checkIfLteReliable()) {
                             if(upiID.contains("@"))
                                 makeCallToNumber("*99*1*3#");
-                            else if(upiID.matches("\\d+"))
+                            else if(upiID.matches("\\d+") && upiID.length()==10){
                                 makeCallToNumber("*99*1*1#");
+                            }
                         } else {
                             ussd.sendUSSDCommand("*99#");
                         }
@@ -1305,7 +1312,11 @@ public class MainActivity extends AppCompatActivity {
                     paymentStartTimeout = new CountDownTimer(20000, 1000) {
                         @Override
                         public void onFinish() {
-                            curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();
+                            String onScreenText = curTransactionDetails.getString("CUR_SCREEN_TEXT", "");
+                            if(!onScreenText.isBlank() && !onScreenText.contains("USSD code running")) {
+                                System.out.println("Payment timed out. The screen text read at that moment: " + onScreenText);
+                                curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();
+                            }
                         }
 
                         @Override
@@ -1511,6 +1522,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showFinalDialog(boolean status, String message){
         System.out.println("-----------------PAYMENT FINISHED-------------------");
+        phNumURI = "upi://pay?pa=";
         paymentInProgress = false;
         triggeredByContactsIntent = false;
         forceUPIID.cancel();
@@ -1526,6 +1538,7 @@ public class MainActivity extends AppCompatActivity {
         TextView secondBigText = finalMessageBox.findViewById(R.id.second_big_text);
         ImageView statusIcon = finalMessageBox.findViewById(R.id.imageView);
         TextView statusInfo = finalMessageBox.findViewById(R.id.status_info);
+        Button payWithOtherAppButton = finalMessageBox.findViewById(R.id.other_upi_button);
 
         secondSmallText.setVisibility(View.GONE);
         secondBigText.setVisibility(View.GONE);
@@ -1537,21 +1550,41 @@ public class MainActivity extends AppCompatActivity {
             statusIcon.setImageResource(R.drawable.x_mark_256);
             amount = curTransactionDetails.getString("AMOUNT", "?");
             if(message!=null){
-                statusInfo.setText(message);
+                statusInfo.setText(message + "\n\nYou can try using another UPI app, which might need internet:");
             }
             if(message!=null) {
-                if (!message.equals("BAL_CHECK_COMPLETE") && !message.equals("USSD_SETUP_COMPLETE"))
+                if (!message.equals("BAL_CHECK_COMPLETE") && !message.equals("USSD_SETUP_COMPLETE")) {
                     writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
+                    String upiID = curTransactionDetails.getString("UPI_ID", "");
+                    String payeeName = curTransactionDetails.getString("PAYEE_NAME", "");
+                    if(!upiID.isEmpty()){
+                        if((upiID.matches("\\d+") && upiID.length() == 10) || upiID.contains("@")){
+                            if(upiID.contains("@")){
+                                phNumURI = phNumURI.concat(upiID);
+                            } else {
+                                phNumURI = phNumURI.concat(upiID + "@upi");
+                            }
+                            if(!payeeName.isEmpty()){
+                                phNumURI = phNumURI.concat("&pn=" + payeeName);
+                            }
+                            if(!amount.equals("?")){
+                                phNumURI = phNumURI.concat("&am=" + amount);
+                            }
+                        }
+                    }
+                }
             } else {
                 writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
             }
             vibrator.vibrate(VibrationEffect.createWaveform(new long[]{100,0,0,100,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
+            payWithOtherAppButton.setVisibility(View.VISIBLE);
         } else {
             smallText.setText("Paid");
             amount = curTransactionDetails.getString("AMOUNT", "?");
             statusText.setText("₹" + amount);
             secondSmallText.setVisibility(View.VISIBLE);
             secondBigText.setVisibility(View.VISIBLE);
+            payWithOtherAppButton.setVisibility(View.GONE);
             String payeeName = curTransactionDetails.getString("PAYEE_NAME", "NULL");
             if(!payeeName.isEmpty())
                 secondBigText.setText(curTransactionDetails.getString("PAYEE_NAME", "NULL"));
@@ -1588,9 +1621,23 @@ public class MainActivity extends AppCompatActivity {
                 smallText.setText("UPI has been");
                 statusText.setText("REGISTERED");
                 statusInfo.setText("Try the payment again and it should work now");
+                secondSmallText.setVisibility(View.GONE);
                 statusInfo.setVisibility(View.VISIBLE);
             }
         }
+
+        payWithOtherAppButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent phNumIntent = new Intent(Intent.ACTION_VIEW);
+                phNumIntent.setData(Uri.parse(phNumURI));
+                try{
+                    startActivityForResult(phNumIntent, 123);
+                } catch (ActivityNotFoundException e){
+                    showToast("Couldn't open another app", Toast.LENGTH_SHORT);
+                }
+            }
+        });
 
         if(loadingDialog!=null)
             loadingDialog.dismiss();
@@ -1608,6 +1655,7 @@ public class MainActivity extends AppCompatActivity {
                         .remove("AMOUNT")
                         .remove("UPI_PIN")
                         .remove("REMARK").apply();
+                phNumURI = "";
             }
         });
 
