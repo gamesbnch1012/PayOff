@@ -374,7 +374,7 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             timerEnabled = false;
         } else if(!curScreenText.contains("USSD code running…") || curScreenText.contains("Connection problem or invalid MMI code")){
-            pressButton("Cancel", rootNode, 1);
+            pressButton("OK", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-99").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();

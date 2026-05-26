@@ -27,16 +27,19 @@
         android:layout_weight="1">
 
         <LinearLayout
+            android:id="@+id/history_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" >
-        <TextView
-            android:id="@+id/history_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:backgroundTint="@color/grey"
-            android:backgroundTintMode="add"
-            android:text="Couldn't get history." />
+
+            <TextView
+                android:id="@+id/history_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/grey"
+                android:backgroundTintMode="add"
+                android:fontFamily="sans-serif"
+                android:text="Couldn't get history." />
         </LinearLayout>
     </ScrollView>
 

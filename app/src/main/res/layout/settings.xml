@@ -25,6 +25,8 @@
         android:id="@+id/lteOnlyToggle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:checked="true"
+        android:enabled="true"
         android:paddingLeft="10dp"
         android:text="Use only 4G/5G"
         android:textColor="@color/white" />
@@ -66,7 +68,19 @@
 
     <Space
         android:layout_width="match_parent"
-        android:layout_height="20dp" />
+        android:layout_height="10dp" />
+
+    <TextView
+        android:id="@+id/version_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-light"
+        android:text="Version: Unknown"
+        android:textAlignment="center" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="10dp" />
 
     <TextView
         android:id="@+id/textView4"

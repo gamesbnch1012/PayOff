@@ -14,8 +14,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.hardware.camera2.CameraManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -37,15 +37,13 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.Editable;
+import android.text.Html;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AccelerateInterpolator;
@@ -56,6 +54,7 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.Spinner;
@@ -69,7 +68,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.camera2.internal.SynchronizedCaptureSession;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -83,7 +81,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
 
 import android.content.Context;
 import android.widget.Toast;
@@ -98,16 +95,13 @@ import com.journeyapps.barcodescanner.BarcodeEncoder;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -116,7 +110,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
@@ -131,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
     Button mainButton, bankButton;
-    ImageButton settingsButton, historyButton, showQRButton, favouritesButton;
+    ImageButton settingsButton, historyButton, showQRButton, torchButton;
     SharedPreferences curTransactionDetails, userSettings;
     PreviewView cameraView;
     boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
@@ -265,7 +258,7 @@ public class MainActivity extends AppCompatActivity {
         settingsButton = findViewById(R.id.settings_button);
         historyButton = findViewById(R.id.history_button);
         showQRButton = findViewById(R.id.show_qr_button);
-        favouritesButton = findViewById(R.id.favourites_button);
+        torchButton = findViewById(R.id.torch_button);
         upiIDTextField = findViewById(R.id.upiIDField);
         checkBalButton = findViewById(R.id.bal_button);
         signalDebugText = findViewById(R.id.signal_stats_text);
@@ -276,7 +269,7 @@ public class MainActivity extends AppCompatActivity {
 
         //sendValuesToUSSDClass(upiID, upiPIN, amount);
 
-        String lteOnly1 = userSettings.getString("LTE_ONLY", "false");
+        String lteOnly1 = userSettings.getString("LTE_ONLY", "true");
         String showStats1 = userSettings.getString("SHOW_STATS", "false");
 
         if(lteOnly1.equals("true")){
@@ -372,6 +365,7 @@ public class MainActivity extends AppCompatActivity {
             Switch showStatsToggle = dialogBox.findViewById(R.id.networkStatsToggle);
             Switch reallyPayToggle = dialogBox.findViewById(R.id.really_pay_toggle);
             Button reportButton = dialogBox.findViewById(R.id.report_bug_button);
+            TextView versionText = dialogBox.findViewById(R.id.version_text);
 
             String lteOnly = userSettings.getString("LTE_ONLY", "false");
             String showStats = userSettings.getString("SHOW_STATS", "false");
@@ -385,6 +379,14 @@ public class MainActivity extends AppCompatActivity {
             }
             if(reallyPay.equals("false")){
                 reallyPayToggle.setChecked(false);
+            }
+
+            try{
+            PackageInfo pInfo = getApplicationContext().getPackageManager()
+                    .getPackageInfo(getApplicationContext().getPackageName(), 0);
+            versionText.setText("Version: " + pInfo.versionName);
+            } catch (Exception e){
+                e.printStackTrace();
             }
 
             lteOnlyToggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -470,10 +472,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        favouritesButton.setOnClickListener(new View.OnClickListener() {
+        torchButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showToast("Favourites is coming soon...", Toast.LENGTH_LONG);
+                toggleFlash();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    if(torchOn)
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK));
+                    else
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK));
+                }
             }
         });
 
@@ -530,6 +538,7 @@ public class MainActivity extends AppCompatActivity {
                 broadcastAccessibility(false);
                 setEnabled(false);
                 finishAffinity();
+                overridePendingTransition(0, android.R.anim.slide_out_right);
             }
         };
         getOnBackPressedDispatcher().addCallback(this, callback);
@@ -693,6 +702,7 @@ public class MainActivity extends AppCompatActivity {
             System.out.println("Current app version: " + currentVersion + "\nVersion got from GitHub: " + latestVersion);
             if(Integer.parseInt(latestVersion.substring(4)) > Integer.parseInt(currentVersion.substring(4))){
                 System.out.println("Update detected. Opening the download page...");
+                showToast("Update available! Download and install to avoid issues", Toast.LENGTH_LONG);
                 JSONArray assets = release.getJSONArray("assets");
                 String finalURL = "";
                 for(int i=0; i<assets.length(); i++){
@@ -709,6 +719,8 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     System.out.println("Failed to get update URL");
                 }
+            } else {
+                System.out.println("Already on the latest/newer version.");
             }
         }
         connection.disconnect();
@@ -869,6 +881,9 @@ public class MainActivity extends AppCompatActivity {
             historyList = new ArrayList<>();
         }
 
+        if(upiID.isBlank())
+            return;
+
         Map<String, Object> currentTransaction = new HashMap<>();
         Date date = new Date();
         SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
@@ -903,6 +918,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void readTransactionHistory(){
+        boolean firstEntry = true;
         File transactionHistory = new File(getExternalFilesDir(null), "transaction_history.json");
         Gson gson = new Gson();
 
@@ -916,6 +932,9 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setView(dialogBox);
 
+        LinearLayout historyContainer = dialogBox.findViewById(R.id.history_container);
+        historyContainer.removeAllViews();
+
         TextView historyText = dialogBox.findViewById(R.id.history_text);
 
         try (FileReader reader = new FileReader(transactionHistory)) {
@@ -924,10 +943,11 @@ public class MainActivity extends AppCompatActivity {
             ArrayList<Map<String, Object>> history = gson.fromJson(reader, type);
 
             if (history != null) {
-                StringBuilder stringBuilder = new StringBuilder();
 
                 // 2. Loop through each record one-by-one
                 for (Map<String, Object> record : history) {
+                    StringBuilder stringBuilder = new StringBuilder();
+
                     String upiID = String.valueOf(record.get("upi_id"));
                     String payeeName = String.valueOf(record.get("payee_name"));
                     String status = String.valueOf(record.get("status"));
@@ -935,10 +955,25 @@ public class MainActivity extends AppCompatActivity {
                     String time = String.valueOf(record.get("time"));
                     String refID = String.valueOf(record.get("ref_id"));
 
-                    if(upiID.contains("@"))
-                        stringBuilder.append("Payee UPI ID: ").append(upiID).append("\n");
-                    else
-                        stringBuilder.append("Payee Number: ").append(upiID).append("\n");
+                    TextView transaction = new TextView(this);
+                    transaction.setPadding(0, 5, 0, 5);
+
+                    if(!firstEntry){
+                        stringBuilder.append("\n");
+                    } else {
+                        firstEntry = false;
+                    }
+
+                    if(upiID.isEmpty())
+                        continue;
+
+                    if(upiID.contains("@")) {
+                        String payeeUPIIdText = "Payee UPI ID: <font face='sans-serif-medium'>" + upiID + "</font>";
+                        stringBuilder.append(Html.fromHtml(payeeUPIIdText, Html.FROM_HTML_MODE_LEGACY)).append("\n");
+                    } else {
+                        String payeeUPIIdText = "Payee Number: <b>" + upiID + "</b>";
+                        stringBuilder.append(Html.fromHtml(payeeUPIIdText, Html.FROM_HTML_MODE_LEGACY)).append("\n");
+                    }
                     stringBuilder.append("Payee Name: ").append(payeeName).append("\n");
                     stringBuilder.append("Amount: ₹").append(amount).append("\n");
                     if(!time.isEmpty()){
@@ -952,11 +987,30 @@ public class MainActivity extends AppCompatActivity {
                         stringBuilder.append("Status: ").append("Paid").append("\n");
                     else
                         stringBuilder.append("Status: ").append("Failed").append("\n");
-                    stringBuilder.append("\n\n");
+                    //stringBuilder.append("\n\n");
+
+                    transaction.setText(stringBuilder.toString());
+                    transaction.setClickable(true);
+                    transaction.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            if(Boolean.parseBoolean(status))
+                                showTransactionFromHistory(status, upiID, payeeName, amount, time, refID);
+                            else
+                                showDialog("", "This payment wasn't detected as completed. If in doubt, please check any SMS received for confirmation.");
+                        }
+                    });
+                    historyContainer.addView(transaction);
+
+                    View divider = new View(this);
+                    divider.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 2)); // 2px tall
+                    divider.setBackgroundColor(Color.LTGRAY);
+                    divider.setPadding(0, 50, 0, 50);
+                    historyContainer.addView(divider);
                 }
 
                 // 4. Update the TextView
-                historyText.setText(stringBuilder.toString());
+                //historyText.setText(stringBuilder.toString());
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -1109,6 +1163,21 @@ public class MainActivity extends AppCompatActivity {
 
     private void showToast(String message, int duration){
         Toast.makeText(this, message, duration).show();
+    }
+
+    private void showDialog(String title, String message){
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        if(!title.isBlank())
+            builder.setTitle("Dialog Title");
+        builder.setMessage(message);
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.dismiss();
+            }
+        });
+        AlertDialog dialog = builder.create();
+        dialog.show();
     }
 
     private void startCamera() {
@@ -1721,6 +1790,55 @@ public class MainActivity extends AppCompatActivity {
                 .putString("TIMER_INACTIVE", "0")
                 .putString("REFERENCE_ID", "")
                 .putString("REMARK", "").apply();
+    }
+
+    private void showTransactionFromHistory(String status, String upiID, String payeeName, String amount, String time, String refID){
+        if(loadingDialog!=null)
+            loadingDialog.setCancelable(true);
+        View finalMessageBox = getLayoutInflater().inflate(R.layout.final_message, null);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setView(finalMessageBox);
+
+        TextView smallText = finalMessageBox.findViewById(R.id.status_text);
+        TextView secondSmallText = finalMessageBox.findViewById(R.id.second_small_text);
+        TextView statusText = finalMessageBox.findViewById(R.id.final_status_text);
+        TextView secondBigText = finalMessageBox.findViewById(R.id.second_big_text);
+        ImageView statusIcon = finalMessageBox.findViewById(R.id.imageView);
+        TextView statusInfo = finalMessageBox.findViewById(R.id.status_info);
+        Button payWithOtherAppButton = finalMessageBox.findViewById(R.id.other_upi_button);
+
+        secondSmallText.setVisibility(View.GONE);
+        secondBigText.setVisibility(View.GONE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK));
+        } else {
+            vibrator.vibrate(VibrationEffect.createOneShot(60, 90));
+        }
+
+        if(status.equals("false")){
+            statusText.setText("FAILED");
+            statusIcon.setImageResource(R.drawable.x_mark_256);
+            statusInfo.setText("\n\nYou can try using another UPI app, which might need internet:");
+            payWithOtherAppButton.setVisibility(View.VISIBLE);
+        } else {
+            smallText.setText("Paid");
+            statusText.setText("₹" + amount);
+            secondSmallText.setVisibility(View.VISIBLE);
+            secondBigText.setVisibility(View.VISIBLE);
+            payWithOtherAppButton.setVisibility(View.GONE);
+            if(!payeeName.isEmpty())
+                secondBigText.setText(payeeName);
+            else
+                secondBigText.setText(upiID);
+            if(!refID.isEmpty())
+                statusInfo.setText("Reference ID: " + refID);
+        }
+
+        if(loadingDialog!=null)
+            loadingDialog.dismiss();
+        dialog = builder.create();
+        dialog.show();
     }
 
     public void showPaymentProgress(String customMessage) {

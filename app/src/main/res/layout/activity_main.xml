@@ -9,13 +9,14 @@
 
     <androidx.camera.view.PreviewView
         android:id="@+id/viewFinder"
-        android:layout_width="250dp"
-        android:layout_height="250dp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintHeight_percent="0.55"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.3" >
+        app:layout_constraintVertical_bias="0">
 
     </androidx.camera.view.PreviewView>
 
@@ -83,7 +84,7 @@
         android:layout_marginTop="7dp"
         android:layout_marginRight="7dp"
         android:adjustViewBounds="true"
-        android:backgroundTint="#000000"
+        android:backgroundTint="#00000000"
         android:paddingRight="10dp"
         android:scaleType="fitCenter"
         app:layout_constraintEnd_toEndOf="parent"
@@ -96,7 +97,7 @@
         android:layout_height="50dp"
         android:layout_marginTop="8dp"
         android:adjustViewBounds="true"
-        android:backgroundTint="#000000"
+        android:backgroundTint="#00000000"
         android:padding="12dp"
         android:scaleType="fitCenter"
         app:layout_constraintEnd_toEndOf="@id/settings_button"
@@ -109,7 +110,7 @@
         android:layout_height="50dp"
         android:layout_marginTop="8dp"
         android:adjustViewBounds="true"
-        android:backgroundTint="#000000"
+        android:backgroundTint="#00000000"
         android:padding="12dp"
         android:scaleType="fitCenter"
         app:layout_constraintEnd_toEndOf="@id/history_button"
@@ -117,17 +118,18 @@
         app:srcCompat="@drawable/qr_code_icon_512" />
 
     <ImageButton
-        android:id="@+id/favourites_button"
+        android:id="@+id/torch_button"
         android:layout_width="50dp"
         android:layout_height="50dp"
         android:layout_marginTop="8dp"
         android:adjustViewBounds="true"
-        android:backgroundTint="#000000"
+        android:backgroundTint="#00000000"
         android:foregroundTintMode="add"
         android:padding="12dp"
         android:scaleType="fitCenter"
         app:layout_constraintEnd_toEndOf="@id/show_qr_button"
         app:layout_constraintTop_toBottomOf="@id/show_qr_button"
-        app:srcCompat="@drawable/star_icon_1024" />
+        app:srcCompat="@drawable/torch_512" />
+
 
 </androidx.constraintlayout.widget.ConstraintLayout>
