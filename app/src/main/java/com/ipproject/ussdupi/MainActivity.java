@@ -572,6 +572,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         }, 1000);
+
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                ExecutorService executorService = Executors.newSingleThreadExecutor();
+                executorService.execute(() -> {
+                    try {
+                        checkForUpdates();
+                    } catch (Exception e){
+                        System.out.println("Error occured when checking for updates");
+                        e.printStackTrace();
+                    } finally {
+                        executorService.shutdown();
+                    }
+                });
+            }
+        }, 3000);
     }
 
     void broadcastAccessibility(boolean status){
@@ -685,10 +702,9 @@ public class MainActivity extends AppCompatActivity {
 
     void checkForUpdates() throws Exception{
         System.out.println("Checking for updates...");
-        String currentVersion = "";
         PackageInfo pInfo = getApplicationContext().getPackageManager()
                     .getPackageInfo(getApplicationContext().getPackageName(), 0);
-        currentVersion = pInfo.versionName;
+        String currentVersion = pInfo.versionName;
         URL updateURL = new URL("https://api.github.com/repos/gamesbnch1012/payOff/releases/latest");
         HttpURLConnection connection = (HttpURLConnection) updateURL.openConnection();
         connection.setRequestMethod("GET");
@@ -700,11 +716,10 @@ public class MainActivity extends AppCompatActivity {
             JSONObject release = new JSONObject(result);
             String latestVersion = release.getString("tag_name");
             System.out.println("Current app version: " + currentVersion + "\nVersion got from GitHub: " + latestVersion);
+            String finalURL = "";
             if(Integer.parseInt(latestVersion.substring(4)) > Integer.parseInt(currentVersion.substring(4))){
                 System.out.println("Update detected. Opening the download page...");
-                showToast("Update available! Download and install to avoid issues", Toast.LENGTH_LONG);
                 JSONArray assets = release.getJSONArray("assets");
-                String finalURL = "";
                 for(int i=0; i<assets.length(); i++){
                     JSONObject asset = assets.getJSONObject(i);
                     if(asset.getString("name").endsWith(".apk")){
@@ -712,13 +727,17 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     }
                 }
-                if(!finalURL.isEmpty()){
-                    Intent updateIntent = new Intent(Intent.ACTION_VIEW);
-                    updateIntent.setData(Uri.parse(finalURL));
-                    startActivity(updateIntent);
-                } else {
-                    System.out.println("Failed to get update URL");
+                String reallyFinalURL = finalURL;
+                if(finalURL.isEmpty()){
+                    System.out.println("Failed to check for updates.");
+                    showToast("Failed to check for updates.", Toast.LENGTH_SHORT);
                 }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        showDialog("Update Available", "New version " + latestVersion + " is available to download. The current version is " + currentVersion + ". Would you like to download it now?", "UPDATE_PROMPT=" + reallyFinalURL);
+                    }
+                });
             } else {
                 System.out.println("Already on the latest/newer version.");
             }
@@ -997,7 +1016,7 @@ public class MainActivity extends AppCompatActivity {
                             if(Boolean.parseBoolean(status))
                                 showTransactionFromHistory(status, upiID, payeeName, amount, time, refID);
                             else
-                                showDialog("", "This payment wasn't detected as completed. If in doubt, please check any SMS received for confirmation.");
+                                showDialog("", "This payment wasn't detected as completed. If in doubt, please check any SMS received for confirmation.", "");
                         }
                     });
                     historyContainer.addView(transaction);
@@ -1165,17 +1184,35 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, message, duration).show();
     }
 
-    private void showDialog(String title, String message){
+    private void showDialog(String title, String message, String type){
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        if(!title.isBlank())
-            builder.setTitle("Dialog Title");
+        if (!title.isBlank())
+            builder.setTitle(title);
         builder.setMessage(message);
-        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.dismiss();
-            }
-        });
+        if(type.isBlank()) {
+            builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
+        } else if(type.contains("UPDATE_PROMPT")){
+            builder.setPositiveButton("UPDATE", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    String updateURL = type.substring(14);
+                    Intent updateIntent = new Intent(Intent.ACTION_VIEW);
+                    updateIntent.setData(Uri.parse(updateURL));
+                    startActivity(updateIntent);
+                }
+            });
+            builder.setNegativeButton("LATER", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
+        }
         AlertDialog dialog = builder.create();
         dialog.show();
     }
@@ -1946,21 +1983,6 @@ public class MainActivity extends AppCompatActivity {
             upiIDTextField.clearFocus();
             //upiIDTextField.setText("");
             curTransactionDetails.edit().putString("PAYEE_NAME", "").apply();
-            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    ExecutorService executorService = Executors.newSingleThreadExecutor();
-                    executorService.execute(() -> {
-                        try {
-                            checkForUpdates();
-                        } catch (Exception e){
-                            System.out.println("Error occured when checking for updates");
-                            e.printStackTrace();
-                        }
-                    });
-
-                }
-            }, 2000);
             startCamera();
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override
