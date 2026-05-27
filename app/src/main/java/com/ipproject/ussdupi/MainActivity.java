@@ -313,13 +313,6 @@ public class MainActivity extends AppCompatActivity {
             biometricPINenabled = true;
         }
 
-        cameraView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                toggleFlash();
-            }
-        });
-
         contactPickerLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -602,7 +595,7 @@ public class MainActivity extends AppCompatActivity {
                     String amount = data.getQueryParameter("am");
                     String remark = data.getQueryParameter("tn");
                     if(data.getQueryParameter("tr")!=null){
-                        showFinalDialog(false, "This payment isn't supported by PayOff. USSD doesn't support merchant payments yet.");
+                        showFinalDialog(false, "This payment isn't supported by PayOff. USSD doesn't support merchant payments yet.", true);
                     }
                     if(payeeName!=null) {
                         curTransactionDetails.edit().putString("PAYEE_NAME", data.getQueryParameter("pn")).apply();
@@ -1761,26 +1754,26 @@ public class MainActivity extends AppCompatActivity {
                     System.out.println("Transaction complete!");
                     upiIDReadFromQR = "";
                     hidePaymentProgress();
-                    showFinalDialog(true, null);
+                    showFinalDialog(true, null, false);
                 } else if(transaction_status.equals("2")){
                     System.out.println("Balance check complete!");
                     hidePaymentProgress();
-                    showFinalDialog(true, "BAL_CHECK_COMPLETE");
+                    showFinalDialog(true, "BAL_CHECK_COMPLETE", false);
                 } else if(transaction_status.equals("3")){
                     System.out.println("USSD setup complete!");
                     hidePaymentProgress();
-                    showFinalDialog(true, "USSD_SETUP_COMPLETE");
+                    showFinalDialog(true, "USSD_SETUP_COMPLETE", false);
                 }else if(transaction_status.equals("-1")) {
-                    showFinalDialog(false, "You have exceeded your daily UPI transaction limit");
+                    showFinalDialog(false, "You have exceeded your daily UPI transaction limit", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-2")) {
-                    showFinalDialog(false, "The UPI PIN entered is incorrect");
+                    showFinalDialog(false, "The UPI PIN entered is incorrect", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-3")) {
-                    showFinalDialog(false, "Payment has timed out. Check if the money has been debited and retry if it hasn't");
+                    showFinalDialog(false, "Payment has timed out. Check if the money has been debited and retry if it hasn't", true);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-4")) {
-                    showFinalDialog(false, "The amount entered is either invalid or too high");
+                    showFinalDialog(false, "The amount entered is either invalid or too high", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-5")) {
                     System.out.println("USSD isn't set up!");
@@ -1789,10 +1782,13 @@ public class MainActivity extends AppCompatActivity {
                     curTransactionDetails.edit().putString("TRANSACTION_FINISH", "").apply();
                     loadingDialog.dismiss();
                 } else if(transaction_status.equals("-6")){
-                    showFinalDialog(false, "UPI ID (or) QR Code is not valid");
+                    showFinalDialog(false, "UPI ID (or) QR Code is not valid", true);
                     hidePaymentProgress();
-                } else if (transaction_status.equals("-99")){
-                    showFinalDialog(false, "An unknown error occurred and the payment couldn't be processed");
+                } else if(transaction_status.equals("-7")){
+                    showFinalDialog(false, "Your bank server is down at the moment", false);
+                    hidePaymentProgress();
+                }else if (transaction_status.equals("-99")){
+                    showFinalDialog(false, "An unknown error occurred and the payment couldn't be processed", true);
                     hidePaymentProgress();
                 } else {
                     this.start();
@@ -1803,7 +1799,7 @@ public class MainActivity extends AppCompatActivity {
         System.out.println("Loading started with UPI ID as: " + curTransactionDetails.getString("UPI_ID", "NULL") + "\nIn upiIDReadFromQR: " + upiIDReadFromQR);
     }
 
-    private void showFinalDialog(boolean status, String message){
+    private void showFinalDialog(boolean status, String message, boolean otherAppButtonVisible){
         System.out.println("-----------------PAYMENT FINISHED-------------------");
         phNumURI = "upi://pay?pa=";
         paymentInProgress = false;
@@ -1833,7 +1829,10 @@ public class MainActivity extends AppCompatActivity {
             statusIcon.setImageResource(R.drawable.x_mark_256);
             amount = curTransactionDetails.getString("AMOUNT", "?");
             if(message!=null){
-                statusInfo.setText(message + "\n\nYou can try using another UPI app, which might need internet:");
+                if(otherAppButtonVisible)
+                    statusInfo.setText(message + "\n\nYou can try using another UPI app, which might need internet:");
+                else
+                    statusInfo.setText(message);
             }
             if(message!=null) {
                 if (!message.equals("BAL_CHECK_COMPLETE") && !message.equals("USSD_SETUP_COMPLETE")) {
@@ -1860,14 +1859,12 @@ public class MainActivity extends AppCompatActivity {
                 writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
             }
             vibrator.vibrate(VibrationEffect.createWaveform(new long[]{100,0,0,100,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
-            payWithOtherAppButton.setVisibility(View.VISIBLE);
         } else {
             smallText.setText("Paid");
             amount = curTransactionDetails.getString("AMOUNT", "?");
             statusText.setText("₹" + amount);
             secondSmallText.setVisibility(View.VISIBLE);
             secondBigText.setVisibility(View.VISIBLE);
-            payWithOtherAppButton.setVisibility(View.GONE);
             String payeeName = curTransactionDetails.getString("PAYEE_NAME", "NULL");
             if(!payeeName.isEmpty())
                 secondBigText.setText(curTransactionDetails.getString("PAYEE_NAME", "NULL"));
@@ -1890,6 +1887,12 @@ public class MainActivity extends AppCompatActivity {
             } else if(message.contains("BAL_CHECK_COMPLETE")){
                 vibrator.vibrate(VibrationEffect.createOneShot(60, 90));
             }
+        }
+
+        if(otherAppButtonVisible){
+            payWithOtherAppButton.setVisibility(View.VISIBLE);
+        } else {
+            payWithOtherAppButton.setVisibility(View.GONE);
         }
 
         if(message!=null){

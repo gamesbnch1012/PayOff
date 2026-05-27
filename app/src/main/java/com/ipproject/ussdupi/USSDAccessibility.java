@@ -367,14 +367,21 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-4").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             timerEnabled = false;
-        } else if(curScreenText.contains("PSP IS NOT REGISTERED") || curScreenText.contains("the entered UPI ID is invalid")){
+        } else if(curScreenText.contains("PSP IS NOT REGISTERED") || curScreenText.contains("the entered UPI ID is invalid")) {
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-6").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             timerEnabled = false;
+        } else if(curScreenText.contains("Sorry, We are unable to process your request. Please try after sometime")){
+            pressButton("Cancel", rootNode, 1);
+            nextStep = "";
+            curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-7").apply();
+            curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
+            timerEnabled=false;
         } else if(!curScreenText.contains("USSD code running…") || curScreenText.contains("Connection problem or invalid MMI code")){
             pressButton("OK", rootNode, 1);
+            pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-99").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
