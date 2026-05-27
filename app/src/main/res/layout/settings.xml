@@ -58,6 +58,27 @@
 
     <Space
         android:layout_width="match_parent"
+        android:layout_height="25dp" />
+
+    <Button
+        android:id="@+id/setup_biometrics_button"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="Set-up Biometric PIN" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="10dp" />
+
+    <Button
+        android:id="@+id/change_sim_button"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:enabled="false"
+        android:text="Change SIM to use" />
+
+    <Space
+        android:layout_width="match_parent"
         android:layout_height="30dp" />
 
     <Button

@@ -15,6 +15,7 @@ import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.MaskFilter;
 import android.graphics.PixelFormat;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -68,6 +69,8 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
@@ -81,6 +84,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
 
 import android.content.Context;
 import android.widget.Toast;
@@ -112,6 +117,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 //import java.util.logging.Handler;
@@ -120,12 +126,12 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     Button ussdSendButton, checkBalButton;
-    EditText upiIDTextField;
+    EditText upiIDTextField, textBox;
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
     Button mainButton, bankButton;
     ImageButton settingsButton, historyButton, showQRButton, torchButton;
-    SharedPreferences curTransactionDetails, userSettings;
+    SharedPreferences curTransactionDetails, userSettings, encryptedPreferences;
     PreviewView cameraView;
     boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
     AlertDialog dialog, loadingDialog;
@@ -139,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
-    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false;
+    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false, biometricPINenabled = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID, phNumURI;
@@ -192,6 +198,21 @@ public class MainActivity extends AppCompatActivity {
             chosenSIM = 1;
         } else {
             checkSIMs();
+        }
+
+        try {
+            MasterKey masterKey = new MasterKey.Builder(this)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+            encryptedPreferences = EncryptedSharedPreferences.create(
+                    this,
+                    "secure_shared_prefs", // Name of the file
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+        } catch (Exception e){
+            e.printStackTrace();
         }
 
         //checkForAllPermissions();
@@ -271,6 +292,7 @@ public class MainActivity extends AppCompatActivity {
 
         String lteOnly1 = userSettings.getString("LTE_ONLY", "true");
         String showStats1 = userSettings.getString("SHOW_STATS", "false");
+        String biometricPINstatus = encryptedPreferences.getString("SAVED_PIN", "");
 
         if(lteOnly1.equals("true")){
             useOnlyLTE = true;
@@ -283,6 +305,12 @@ public class MainActivity extends AppCompatActivity {
         } else {
             showingStats = false;
             signalDebugText.setVisibility(View.GONE);
+        }
+
+        if(biometricPINstatus.isBlank()){
+            biometricPINenabled = false;
+        } else {
+            biometricPINenabled = true;
         }
 
         cameraView.setOnClickListener(new View.OnClickListener() {
@@ -306,8 +334,8 @@ public class MainActivity extends AppCompatActivity {
                 upiIDTextField.setText(curTransactionDetails.getString("UPI_ID", ""));
             }
             if (!(upiIDTextField.getText().toString().isEmpty() || !upiIDTextField.getText().toString().contains("@")) || (upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10)) {
-                if((upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10))
-                    upiIDTextField.setText(upiIDTextField.getText().toString().concat("@upi"));
+                /*if((upiIDTextField.getText().toString().matches("\\d+") && upiIDTextField.getText().toString().length() == 10))
+                    upiIDTextField.setText(upiIDTextField.getText().toString().concat("@upi"));*/
                 curTransactionDetails.edit().putString("UPI_ID", upiIDTextField.getText().toString()).apply();
                 upiID = upiIDTextField.getText().toString();
                 upiPIN = curTransactionDetails.getString("UPI_PIN", "");
@@ -356,14 +384,18 @@ public class MainActivity extends AppCompatActivity {
                 dialogBeingShown = false;
             }
 
+            final AlertDialog settingsMenu;
+
             View dialogBox = getLayoutInflater().inflate(R.layout.settings, null);
             dialogBox.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
             AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
             builder.setView(dialogBox);
+            settingsMenu = builder.create();
 
             Switch lteOnlyToggle = dialogBox.findViewById(R.id.lteOnlyToggle);
             Switch showStatsToggle = dialogBox.findViewById(R.id.networkStatsToggle);
             Switch reallyPayToggle = dialogBox.findViewById(R.id.really_pay_toggle);
+            Button biometricButton = dialogBox.findViewById(R.id.setup_biometrics_button);
             Button reportButton = dialogBox.findViewById(R.id.report_bug_button);
             TextView versionText = dialogBox.findViewById(R.id.version_text);
 
@@ -379,6 +411,12 @@ public class MainActivity extends AppCompatActivity {
             }
             if(reallyPay.equals("false")){
                 reallyPayToggle.setChecked(false);
+            }
+            if(!isBiometricAvailable()){
+                biometricButton.setEnabled(false);
+            }
+            if(biometricPINenabled){
+                biometricButton.setText("Modify Biometric PIN");
             }
 
             try{
@@ -436,6 +474,15 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+            biometricButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    settingsMenu.dismiss();
+                    dialogBeingShown = false;
+                    showNewDialog("BIOMETRIC_PIN_SETUP", true);
+                }
+            });
+
             reportButton.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {
@@ -451,7 +498,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            builder.show();
+            settingsMenu.show();
         });
 
         historyButton.setOnClickListener(new View.OnClickListener() {
@@ -510,7 +557,7 @@ public class MainActivity extends AppCompatActivity {
                     ussdSendButton.setEnabled(false);
                 }
 
-                if(string.length() == 10 && string.matches("\\d+") && !dialogBeingShown && !triggeredByContactsIntent){
+                /*if(string.length() == 10 && string.matches("\\d+") && !dialogBeingShown && !triggeredByContactsIntent){
                     upiIDTextField.setText(string.concat("@upi"));
                     ussdSendButton.performClick();
                     System.out.println("MAIN button pressed from text entered in field");
@@ -518,7 +565,7 @@ public class MainActivity extends AppCompatActivity {
                     System.out.println("triggeredByContactsIntent is set to true, ignoring the change in text field...");
                 } else if(dialogBeingShown){
                     System.out.println("dialogBeingShown is set to true, ignoring the change in text field...");
-                }
+                }*/
             }
         });
 
@@ -654,6 +701,52 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_CONTACTS}, 105);
             contactsPermission = true;
         }
+    }
+
+    private boolean isBiometricAvailable(){
+        BiometricManager biometricManager = BiometricManager.from(this);
+        int authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
+                | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+        if(biometricManager.canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS){
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private void authenticateUser(){
+        System.out.println("Authentication request received.");
+        Executor executor = ContextCompat.getMainExecutor(this);
+        BiometricPrompt.AuthenticationCallback callback = new BiometricPrompt.AuthenticationCallback() {
+            @Override
+            public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                super.onAuthenticationError(errorCode, errString);
+                showToast("Authentication failed. Enter your UPI PIN manually", Toast.LENGTH_SHORT);
+            }
+
+            @Override
+            public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                super.onAuthenticationSucceeded(result);
+                upiPIN = encryptedPreferences.getString("SAVED_PIN", "");
+                textBox.setText(upiPIN);
+                mainButton.performClick();
+            }
+
+            @Override
+            public void onAuthenticationFailed() {
+                super.onAuthenticationFailed();
+                showToast("Authentication failed. Enter your UPI PIN manually", Toast.LENGTH_SHORT);
+            }
+        };
+        BiometricPrompt biometricPrompt = new BiometricPrompt(this, executor, callback);
+        BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Authorization")
+                .setSubtitle("Authorize this transaction using registered biometrics")
+                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG
+                        | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build();
+
+        biometricPrompt.authenticate(promptInfo);
     }
 
     void handleContactResult(Uri contactUri){
@@ -1283,7 +1376,7 @@ public class MainActivity extends AppCompatActivity {
         TextView firstSmallText = dialogBox.findViewById(R.id.status_text);
         TextView firstBigText = dialogBox.findViewById(R.id.final_bal_text);
         TextView hintText = dialogBox.findViewById(R.id.text4);
-        EditText textBox = dialogBox.findViewById(R.id.main_pin);
+        textBox = dialogBox.findViewById(R.id.main_pin);
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         mainButton = dialogBox.findViewById(R.id.settings_apply_button);
 
@@ -1322,6 +1415,8 @@ public class MainActivity extends AppCompatActivity {
             mainButton.setVisibility(View.VISIBLE);
             mainButton.setText("PAY");
             textBox.setHint("PIN");
+            if(biometricPINenabled)
+                authenticateUser();
         } else if(mode.equals("CHECK_BAL_PIN")){
             secondSmallText.setVisibility(View.GONE);
             secondBigText.setVisibility(View.GONE);
@@ -1331,6 +1426,8 @@ public class MainActivity extends AppCompatActivity {
             firstBigText.setText("PIN");
             firstSmallText.setText("Enter");
             textBox.setHint("PIN");
+            if(biometricPINenabled)
+                authenticateUser();
         } else if(mode.equals("PAYING")){
             curTransactionDetails.edit().putString("UPI_ID", upiIDReadFromQR).apply();
         } else if(mode.equals("CARD_DIGITS")){
@@ -1364,6 +1461,16 @@ public class MainActivity extends AppCompatActivity {
             hintText.setText("Enter your UPI ID to display your QR:");
             textBox.setHint("Your UPI ID");
             textBox.setInputType(InputType.TYPE_CLASS_TEXT);
+        } else if(mode.equals("BIOMETRIC_PIN_SETUP")){
+            secondSmallText.setVisibility(View.GONE);
+            secondBigText.setVisibility(View.GONE);
+            hintText.setVisibility(View.VISIBLE);
+            mainButton.setVisibility(View.VISIBLE);
+            mainButton.setText("SAVE PIN");
+            firstBigText.setText("PIN");
+            firstSmallText.setText("Enter");
+            hintText.setText("Leave blank and save to remove Biometric PIN");
+            textBox.setHint("PIN");
         }
 
         textBox.postDelayed(() -> {
@@ -1512,6 +1619,25 @@ public class MainActivity extends AppCompatActivity {
                     showMyQR();
                 } else {
                     showToast("Enter a valid UPI ID", Toast.LENGTH_SHORT);
+                }
+            } else if(mode.equals("BIOMETRIC_PIN_SETUP")){
+                String enteredPIN = textBox.getText().toString();
+                if(enteredPIN.length()==4 || enteredPIN.length()==6) {
+                    encryptedPreferences.edit().putString("SAVED_PIN", enteredPIN).apply();
+                    dialog.dismiss();
+                    biometricPINenabled = true;
+                    showDialog("Biometric PIN is set-up", "Biometric PIN is now set up and will be asked the next time it is required.", "");
+                } else if(enteredPIN.isBlank()){
+                    if(!biometricPINenabled){
+                        showToast("UPI PIN can only be 4 or 6 digits", Toast.LENGTH_SHORT);
+                    } else {
+                        encryptedPreferences.edit().putString("SAVED_PIN", "").apply();
+                        dialog.dismiss();
+                        biometricPINenabled = false;
+                        showDialog("Biometric PIN removed", "Biometric PIN has been removed successfully.", "");
+                    }
+                } else {
+                    showToast("UPI PIN can only be 4 or 6 digits", Toast.LENGTH_SHORT);
                 }
             }
         });
