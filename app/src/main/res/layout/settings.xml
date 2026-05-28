@@ -74,7 +74,7 @@
         android:id="@+id/change_sim_button"
         android:layout_width="match_parent"
         android:layout_height="60dp"
-        android:enabled="false"
+        android:enabled="true"
         android:text="Change SIM to use" />
 
     <Space

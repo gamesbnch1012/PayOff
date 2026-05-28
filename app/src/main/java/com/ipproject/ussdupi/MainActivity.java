@@ -145,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
-    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false, biometricPINenabled = false;
+    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false, biometricPINenabled = false, dualSIM = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID, phNumURI;
@@ -190,15 +190,15 @@ public class MainActivity extends AppCompatActivity {
                 .putString("REMARK", "").apply();
         myUPIID = userSettings.getString("USER_UPI_ID", "");
 
-        userSettings.edit().putString("CHOSEN_SIM", "-1").apply();
+        //userSettings.edit().putString("CHOSEN_SIM", "-1").apply();
 
-        if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
+        if(userSettings.getString("CHOSEN_SIM", "-1").equals("0")){
             chosenSIM = 0;
-        } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("2")){
+        } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
             chosenSIM = 1;
-        } else {
-            checkSIMs();
         }
+
+        checkSIMs(false);
 
         try {
             MasterKey masterKey = new MasterKey.Builder(this)
@@ -389,6 +389,7 @@ public class MainActivity extends AppCompatActivity {
             Switch showStatsToggle = dialogBox.findViewById(R.id.networkStatsToggle);
             Switch reallyPayToggle = dialogBox.findViewById(R.id.really_pay_toggle);
             Button biometricButton = dialogBox.findViewById(R.id.setup_biometrics_button);
+            Button changeSIMButton = dialogBox.findViewById(R.id.change_sim_button);
             Button reportButton = dialogBox.findViewById(R.id.report_bug_button);
             TextView versionText = dialogBox.findViewById(R.id.version_text);
 
@@ -410,6 +411,12 @@ public class MainActivity extends AppCompatActivity {
             }
             if(biometricPINenabled){
                 biometricButton.setText("Modify Biometric PIN");
+            }
+
+            if(dualSIM){
+                changeSIMButton.setEnabled(true);
+            } else {
+                changeSIMButton.setEnabled(false);
             }
 
             try{
@@ -473,6 +480,15 @@ public class MainActivity extends AppCompatActivity {
                     settingsMenu.dismiss();
                     dialogBeingShown = false;
                     showNewDialog("BIOMETRIC_PIN_SETUP", true);
+                }
+            });
+
+            changeSIMButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    settingsMenu.dismiss();
+                    dialogBeingShown = false;
+                    checkSIMs(true);
                 }
             });
 
@@ -831,7 +847,7 @@ public class MainActivity extends AppCompatActivity {
         connection.disconnect();
     }
 
-    void checkSIMs(){
+    void checkSIMs(boolean forcePickSIM){
         System.out.println("Initiated SIM checking");
         int simCount = 1;
         //SubscriptionManager sm = (SubscriptionManager) getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
@@ -847,9 +863,10 @@ public class MainActivity extends AppCompatActivity {
                 System.exit(0);
             }
             if(simCount>1){
+                dualSIM = true;
                 chosenSIM = Integer.parseInt(userSettings.getString("CHOSEN_SIM", "-1"));
                 System.out.println("The SIM to be used is saved as: " + chosenSIM);
-                if(chosenSIM==-1){
+                if(chosenSIM==-1 || forcePickSIM){
                     System.out.println("SIM isn't picked yet. Prompting the user to select...");
                     if(dialogBeingShown){
                         dialog.dismiss();
@@ -870,15 +887,23 @@ public class MainActivity extends AppCompatActivity {
                         simradio[slotIndex].setText("SIM " + slotIndex + ": " + info.getCarrierName().toString());
                     }
 
+                    if(chosenSIM!=-1){
+                        simradio[chosenSIM].setChecked(true);
+                    } else {
+                        simradio[0].setChecked(true);
+                    }
+
                     saveButton.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
                             if(simradio[0].isChecked()){
-                                userSettings.edit().putString("CHOSEN_SIM", "1").apply();
+                                userSettings.edit().putString("CHOSEN_SIM", "0").apply();
+                                //showToast("SIM 1 Saved", Toast.LENGTH_SHORT);
                                 chosenSIM = 0;
                                 simDialog.dismiss();
                             } else if(simradio[1].isChecked()){
-                                userSettings.edit().putString("CHOSEN_SIM", "2").apply();
+                                userSettings.edit().putString("CHOSEN_SIM", "1").apply();
+                                //showToast("SIM 2 Saved", Toast.LENGTH_SHORT);
                                 chosenSIM = 1;
                                 simDialog.dismiss();
                             } else {
@@ -888,14 +913,15 @@ public class MainActivity extends AppCompatActivity {
                     });
                     simDialog.show();
                 } else {
-                    if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
+                    if(userSettings.getString("CHOSEN_SIM", "-1").equals("0")){
                         chosenSIM = 0;
-                    } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("2")){
+                    } else if(userSettings.getString("CHOSEN_SIM", "-1").equals("1")){
                         chosenSIM = 1;
                     }
                     System.out.println("Dual SIM detected. The sim being used: " + chosenSIM);
                 }
             } else {
+                dualSIM = false;
                 chosenSIM = 0;
             }
         } else {
@@ -1530,7 +1556,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             } else if(mode.equals("PIN") || mode.equals("CHECK_BAL_PIN")){
                 if(chosenSIM==-1){
-                    checkSIMs();
+                    checkSIMs(true);
                     return;
                 }
                 System.out.println("-----------------PAYMENT INITIATED-------------------");
