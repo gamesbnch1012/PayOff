@@ -31,6 +31,22 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/paymentProgress" />
 
+    <TextView
+        android:id="@+id/force_stop_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="50dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginRight="50dp"
+        android:text="If the payment is taking too long, you can force stop using the below button. There might be some windows open after you tap the button. Simply close the app from recents and reopen to get rid of them."
+        android:textAlignment="center"
+        android:textColor="#8E8E8E"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/dont_press_text" />
+
     <ProgressBar
         android:id="@+id/paymentProgress"
         style="?android:attr/progressBarStyleHorizontal"
@@ -47,4 +63,16 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/force_stop_button"
+        android:layout_width="150dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="05dp"
+        android:text="Force Stop"
+        android:textSize="12sp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/force_stop_text" />
 </androidx.constraintlayout.widget.ConstraintLayout>

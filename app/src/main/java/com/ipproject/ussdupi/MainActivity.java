@@ -129,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
     EditText upiIDTextField, textBox;
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
-    Button mainButton, bankButton;
+    Button mainButton, bankButton, forceStopButton;
     ImageButton settingsButton, historyButton, showQRButton, torchButton;
     SharedPreferences curTransactionDetails, userSettings, encryptedPreferences;
     PreviewView cameraView;
@@ -141,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
     private View onTopView;
     ProgressBar progressBar;
     CountDownTimer checkForFinish, checkForQRScan, forceUPIID, paymentStartTimeout, signalCheck;
-    TextView progressText, signalDebugText;
+    TextView progressText, signalDebugText, forceStopText;
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
@@ -150,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
     Intent intent;
     String myUPIID, phNumURI;
     int chosenSIM = -1;
+    ValuePassHelper valuePassHelper;
     private ActivityResultLauncher<Intent> contactPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -321,6 +322,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
         );
+
+        valuePassHelper = (ValuePassHelper) getApplicationContext();
 
         ussdSendButton.setOnClickListener(v -> {
             if(!curTransactionDetails.getString("UPI_ID", "").isEmpty()){
@@ -1017,7 +1020,7 @@ public class MainActivity extends AppCompatActivity {
 
         Map<String, Object> currentTransaction = new HashMap<>();
         Date date = new Date();
-        SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm");
 
         currentTransaction.put("upi_id", upiID);
         currentTransaction.put("payee_name", payeeName);
@@ -1884,7 +1887,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
             }
-            vibrator.vibrate(VibrationEffect.createWaveform(new long[]{100,0,0,100,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
+            vibrator.vibrate(VibrationEffect.createWaveform(new long[]{50,0,0,50,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
         } else {
             smallText.setText("Paid");
             amount = curTransactionDetails.getString("AMOUNT", "?");
@@ -1909,7 +1912,7 @@ public class MainActivity extends AppCompatActivity {
             if(message==null)
                 mediaPlayer.start();
             if(message==null) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 50, 0, 0, 50, 0, 0, 50, 0, 0, 50, 0, 0, 255, 0}, -1));
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 255, 0, 0, 255, 0, 0, 50, 0, 0, 50, 0, 0, 255, 0}, -1));
             } else if(message.contains("BAL_CHECK_COMPLETE")){
                 vibrator.vibrate(VibrationEffect.createOneShot(60, 90));
             }
@@ -2011,7 +2014,7 @@ public class MainActivity extends AppCompatActivity {
         if(status.equals("false")){
             statusText.setText("FAILED");
             statusIcon.setImageResource(R.drawable.x_mark_256);
-            statusInfo.setText("\n\nYou can try using another UPI app, which might need internet:");
+            statusInfo.setText("\n\n" + time + "\n\nYou can try using another UPI app, which might need internet:");
             payWithOtherAppButton.setVisibility(View.VISIBLE);
         } else {
             smallText.setText("Paid");
@@ -2024,7 +2027,7 @@ public class MainActivity extends AppCompatActivity {
             else
                 secondBigText.setText(upiID);
             if(!refID.isEmpty())
-                statusInfo.setText("Reference ID: " + refID);
+                statusInfo.setText(time + "\n\nReference ID: " + refID);
         }
 
         if(loadingDialog!=null)
@@ -2054,11 +2057,24 @@ public class MainActivity extends AppCompatActivity {
         // 3. Add the view to the screen
         if (Settings.canDrawOverlays(this)) {
             //this.startLockTask();
+            valuePassHelper.setOnTopView(onTopView);
             fullScreenUI();
             curTransactionDetails.edit().putString("TIMER_INACTIVE", "0").apply();
             windowManager.addView(onTopView, params);
             progressBar = onTopView.findViewById(R.id.paymentProgress);
             progressText = onTopView.findViewById(R.id.textView);
+            forceStopText = onTopView.findViewById(R.id.force_stop_text);
+            forceStopButton = onTopView.findViewById(R.id.force_stop_button);
+            forceStopButton.setVisibility(View.GONE);
+            forceStopText.setVisibility(View.GONE);
+            progressBar.setIndeterminate(true);
+            forceStopButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    hidePaymentProgress();
+                    curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-8").apply();
+                }
+            });
 
             onTopView.animate()
                     .alpha(1f)

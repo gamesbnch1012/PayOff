@@ -22,8 +22,10 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.util.Log;
 import android.view.accessibility.AccessibilityWindowInfo;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import java.util.List;
 
@@ -43,8 +45,11 @@ public class USSDAccessibility extends AccessibilityService {
     boolean reallyPay = true, accessibilityEnabled = false;
     AccessibilityNodeInfo source;
     ProgressBar progressBar;
+    TextView forceStopText;
+    Button forceStopButton;
     CountDownTimer stepTimeout;
     boolean timerEnabled = false;
+    ValuePassHelper valuePassHelper;
 
 
     @Override
@@ -125,6 +130,7 @@ public class USSDAccessibility extends AccessibilityService {
                     Uri.parse("package:" + getPackageName()));
             startActivity(intent);
         }
+
     }
 
     public void hidePaymentProgress() {
@@ -132,6 +138,8 @@ public class USSDAccessibility extends AccessibilityService {
             windowManager.removeView(onTopView);
             onTopView = null;
             timerEnabled = false;
+            forceStopText.setVisibility(View.GONE);
+            forceStopButton.setVisibility(View.GONE);
         }
     }
 
@@ -154,6 +162,11 @@ public class USSDAccessibility extends AccessibilityService {
     public void onInterrupt() {
     }
 
+    @Override
+    public void onCreate(){
+        valuePassHelper = (ValuePassHelper) getApplicationContext();
+    }
+
     void readSharedPreferences(){
         userSettings = getSharedPreferences("USER_SETTINGS", MODE_PRIVATE);
         curTransactionDetails = getSharedPreferences("TRANSACTION_DATA", MODE_PRIVATE);
@@ -172,9 +185,11 @@ public class USSDAccessibility extends AccessibilityService {
                 pressButton("Cancel", source, 1);
                 nextStep = "";
                 String onScreenText = curTransactionDetails.getString("CUR_SCREEN_TEXT", "");
-                if(!onScreenText.isBlank() && !onScreenText.contains("USSD code running") && timerEnabled) {
-                    System.out.println("Payment timed out. The screen text read at that moment: " + onScreenText);
-                    curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();
+                if(!onScreenText.isBlank() && timerEnabled) {
+                    /*System.out.println("Payment timed out. The screen text read at that moment: " + onScreenText);
+                    curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-3").apply();*/
+                    forceStopButton.setVisibility(View.VISIBLE);
+                    forceStopText.setVisibility(View.VISIBLE);
                 } else {
                     System.out.println("Timed out, but ignored");
                 }
@@ -387,6 +402,14 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
             timerEnabled = false;
+        } else if(curScreenText.contains("USSD code running…")){
+            if(onTopView==null)
+                onTopView = valuePassHelper.getOnTopView();
+            if(forceStopButton==null)
+                forceStopButton = onTopView.findViewById(R.id.force_stop_button);
+            if(forceStopText==null)
+                forceStopText = onTopView.findViewById(R.id.force_stop_text);
+            stepTimerStart();
         }
     }
 
