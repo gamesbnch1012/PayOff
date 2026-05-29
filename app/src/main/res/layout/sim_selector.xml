@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="@color/transparent">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="15dp"
+        android:background="@drawable/rounded_corners_window"
+        android:orientation="vertical"
+        android:padding="24dp">
 
     <TextView
         android:id="@+id/text3"
@@ -41,6 +48,7 @@
     <RadioGroup
         android:layout_width="match_parent"
         android:layout_height="match_parent">
+
         <RadioButton
             android:id="@+id/sim_1_radio"
             android:layout_width="match_parent"
@@ -50,7 +58,8 @@
             android:text="SIM 1"
             android:textAlignment="textStart"
             android:textColor="@color/white"
-            android:textColorLink="@color/grey" />
+            android:textColorLink="@color/grey"
+            app:useMaterialThemeColors="true" />
 
         <RadioButton
             android:id="@+id/sim_2_radio"
@@ -59,7 +68,8 @@
             android:padding="10dp"
             android:text="SIM 2"
             android:textColor="@color/white"
-            android:textColorLink="@color/grey" />
+            android:textColorLink="@color/grey"
+            app:useMaterialThemeColors="true" />
     </RadioGroup>>
 
     <Space
@@ -87,3 +97,4 @@
 
 
 </LinearLayout>
+</FrameLayout>

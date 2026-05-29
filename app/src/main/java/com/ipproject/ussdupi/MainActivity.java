@@ -396,6 +396,7 @@ public class MainActivity extends AppCompatActivity {
             AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
             builder.setView(dialogBox);
             settingsMenu = builder.create();
+            settingsMenu.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
             Switch lteOnlyToggle = dialogBox.findViewById(R.id.lteOnlyToggle);
             Switch showStatsToggle = dialogBox.findViewById(R.id.networkStatsToggle);
@@ -473,6 +474,7 @@ public class MainActivity extends AppCompatActivity {
                     if(isChecked) {
                         userSettings.edit().putString("REALLY_PAY", "true").apply();
                     } else {
+                        showDialog("Warning", "You have just disabled the option to make real payments. It shows that a payment was successful even though it hasn't been processed. It is meant to be used for testing purposes only and is not meant to be misused. The only way to check if a real payment has been made is if a Transaction ID was generated.", "");
                         userSettings.edit().putString("REALLY_PAY", "false").apply();
                     }
                 }
@@ -507,14 +509,7 @@ public class MainActivity extends AppCompatActivity {
             reportButton.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {
-                    File logFile = new File(getExternalFilesDir(null), "debug_logcat.txt");
-                    if(logFile.exists()){
-                        logFile.delete();
-                        showToast("Log file reset.", Toast.LENGTH_SHORT);
-                        beginWritingToLog();
-                    } else {
-                        showToast("Log file is already empty.", Toast.LENGTH_SHORT);
-                    }
+                    showDialog("Log Reset", "Are you sure you want to reset the log files? This will delete any previously saved log data.", "LOG_RESET");
                     return true;
                 }
             });
@@ -769,7 +764,7 @@ public class MainActivity extends AppCompatActivity {
         };
         BiometricPrompt biometricPrompt = new BiometricPrompt(this, executor, callback);
         BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Authorization")
+                .setTitle("Biometric PIN")
                 .setSubtitle("Authorize this transaction using registered biometrics")
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG
                         | BiometricManager.Authenticators.DEVICE_CREDENTIAL)
@@ -898,6 +893,7 @@ public class MainActivity extends AppCompatActivity {
                     AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                     builder.setView(dialogBox);
                     final AlertDialog simDialog = builder.create();
+                    simDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
                     RadioButton[] simradio = {dialogBox.findViewById(R.id.sim_1_radio), dialogBox.findViewById(R.id.sim_2_radio)};
                     Button saveButton = dialogBox.findViewById(R.id.sim_selector_button);
@@ -1090,6 +1086,8 @@ public class MainActivity extends AppCompatActivity {
         dialogBox.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setView(dialogBox);
+        dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
         LinearLayout historyContainer = dialogBox.findViewById(R.id.history_container);
         historyContainer.removeAllViews();
@@ -1175,7 +1173,7 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-        builder.show();
+        dialog.show();
     }
 
     void showMyQR(){
@@ -1316,6 +1314,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         dialog.show();
         dialogBeingShown = true;
     }
@@ -1352,9 +1351,40 @@ public class MainActivity extends AppCompatActivity {
                     dialog.dismiss();
                 }
             });
+        } else if(type.contains("LOG_RESET")){
+            builder.setPositiveButton("YES", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    File logFile = new File(getExternalFilesDir(null), "debug_logcat.txt");
+                    if(logFile.exists()){
+                        logFile.delete();
+                        showToast("Log file reset.", Toast.LENGTH_SHORT);
+                        beginWritingToLog();
+                    } else {
+                        showToast("Log file is already empty.", Toast.LENGTH_SHORT);
+                    }
+                }
+            });
+            builder.setNegativeButton("NO", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
         }
         AlertDialog dialog = builder.create();
         dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(getResources().getColor(R.color.white));
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(getResources().getColor(R.color.white));
+        if(type.contains("WARNING")){
+            builder.setPositiveButton("I UNDERSTAND", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                }
+            });
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(getResources().getColor(R.color.red));
+        }
     }
 
     private void startCamera() {
@@ -1554,6 +1584,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         if(!mode.equals("PAYING") && !paymentInProgress && !isDestroyed() && !isFinishing()) {
             dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
             dialog.show();
@@ -1918,7 +1949,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
             }
-            vibrator.vibrate(VibrationEffect.createWaveform(new long[]{50,0,0,50,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
+            vibrator.vibrate(VibrationEffect.createWaveform(new long[]{255,0,0,255,0,0,75,0,0,75,0,0,50,0,0,50,0}, -1));
         } else {
             smallText.setText("Paid");
             amount = curTransactionDetails.getString("AMOUNT", "?");
@@ -1943,9 +1974,9 @@ public class MainActivity extends AppCompatActivity {
             if(message==null)
                 mediaPlayer.start();
             if(message==null) {
-                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 255, 0, 0, 255, 0, 0, 50, 0, 0, 50, 0, 0, 255, 0}, -1));
+                vibrator.vibrate(VibrationEffect.createWaveform(new long[]{0, 50, 0, 0, 50, 0, 0, 50, 0, 0, 50, 0, 0, 255, 0}, -1));
             } else if(message.contains("BAL_CHECK_COMPLETE")){
-                vibrator.vibrate(VibrationEffect.createOneShot(60, 90));
+                vibrator.vibrate(VibrationEffect.createOneShot(60, 180));
             }
         }
 
@@ -1988,6 +2019,7 @@ public class MainActivity extends AppCompatActivity {
         if(loadingDialog!=null)
             loadingDialog.dismiss();
         dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         dialog.show();
 
         dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
@@ -2064,6 +2096,7 @@ public class MainActivity extends AppCompatActivity {
         if(loadingDialog!=null)
             loadingDialog.dismiss();
         dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         dialog.show();
     }
 

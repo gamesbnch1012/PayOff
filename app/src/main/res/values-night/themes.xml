@@ -8,6 +8,7 @@
         <item name="colorAccent">@color/white</item>
         <item name="colorOnPrimaryContainer">@color/white</item>
         <item name="materialButtonStyle">@style/Widget.App.Button</item>
+        <item name="radioButtonStyle">@style/Widget.App.RadioButton</item>
     </style>
 
     <style name="ShapeAppearance.BottomRoundedCard" parent="">
@@ -15,6 +16,10 @@
         <item name="cornerSizeTopRight">0dp</item>
         <item name="cornerSizeBottomLeft">24dp</item>
         <item name="cornerSizeBottomRight">24dp</item>
+    </style>
+
+    <style name="Widget.App.RadioButton" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="buttonTint">@color/white</item>
     </style>
 
     <style name="Widget.App.Button" parent="Widget.Material3.Button">

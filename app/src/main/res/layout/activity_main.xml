@@ -60,7 +60,7 @@
             android:layout_width="50dp"
             android:layout_height="50dp"
             android:layout_marginLeft="9dp"
-            android:backgroundTint="@color/cardview_dark_background"
+            android:backgroundTint="@color/accent_grey"
             android:clickable="true"
             android:cropToPadding="false"
             android:enabled="true"
