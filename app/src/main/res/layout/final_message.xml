@@ -76,7 +76,7 @@
     <Button
         android:id="@+id/other_upi_button"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="60dp"
         android:layout_marginTop="10dp"
         android:paddingTop="10dp"
         android:text="Try with other UPI app" />

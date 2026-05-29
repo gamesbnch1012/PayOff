@@ -15,7 +15,6 @@ import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.MaskFilter;
 import android.graphics.PixelFormat;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -45,6 +44,7 @@ import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
 import android.view.animation.AccelerateInterpolator;
@@ -69,6 +69,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.camera.core.Camera;
@@ -89,6 +90,8 @@ import androidx.security.crypto.MasterKey;
 
 import android.content.Context;
 import android.widget.Toast;
+
+import com.google.android.material.button.MaterialButton;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -125,12 +128,13 @@ import java.util.concurrent.Executors;
 
 
 public class MainActivity extends AppCompatActivity {
-    Button ussdSendButton, checkBalButton;
+    Button checkBalButton;
     EditText upiIDTextField, textBox;
     USSDActions ussd;
     String upiID = "", amount = "", upiPIN = "", upiIDReadFromQR = "";
     Button mainButton, bankButton, forceStopButton;
     ImageButton settingsButton, historyButton, showQRButton, torchButton;
+    MaterialButton ussdSendButton;
     SharedPreferences curTransactionDetails, userSettings, encryptedPreferences;
     PreviewView cameraView;
     boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
@@ -169,9 +173,14 @@ public class MainActivity extends AppCompatActivity {
         Uri data = intent.getData();
         setContentView(R.layout.activity_main);
         EdgeToEdge.enable(this);
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
+        View mainView = findViewById(R.id.main);
+        View statusBarBelow = findViewById(R.id.status_bar_below);
+        ViewCompat.setOnApplyWindowInsetsListener(mainView, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            v.setPadding(systemBars.left, 0, systemBars.right, systemBars.bottom);
+            ViewGroup.LayoutParams params = statusBarBelow.getLayoutParams();
+            params.height = systemBars.top;
+            statusBarBelow.setLayoutParams(params);
             return insets;
         });
 
@@ -560,12 +569,12 @@ public class MainActivity extends AppCompatActivity {
                 String string = s.toString();
                 if(string.contains("@") || (string.length() == 10 && string.matches("\\d+")) || string.isEmpty()){
                     if(string.isEmpty())
-                        ussdSendButton.setText("👤");
+                        ussdSendButton.setIcon(getDrawable(R.drawable.contacts_icon_512));
                     else
-                        ussdSendButton.setText("→");
+                        ussdSendButton.setIcon(getDrawable(R.drawable.right_arrow));
                     ussdSendButton.setEnabled(true);
                 } else {
-                    ussdSendButton.setText("→");
+                    ussdSendButton.setIcon(getDrawable(R.drawable.right_arrow));
                     ussdSendButton.setEnabled(false);
                 }
 
@@ -692,9 +701,17 @@ public class MainActivity extends AppCompatActivity {
             requestAccessibilityPermission();
             accessibilityPermission = true;
         } else if(!drawOverOtherAppsPermission){
-            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
-            startActivityForResult(intent, 103);
-            Toast.makeText(this, "Enable the setting for 'PayOff' to continue", Toast.LENGTH_LONG).show();
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            try {
+                //scrolls to the app in the settings menu
+                startActivityForResult(intent, 103);
+            } catch (Exception e) {
+                intent.setData(null);
+                //simply opens the settings menu
+                startActivityForResult(intent, 103);
+            }
+            Toast.makeText(this, "Enable the setting for 'PayOff' to continue", Toast.LENGTH_SHORT).show();
             drawOverOtherAppsPermission = true;
         } else if(!cameraPermission){
             showToast("Allow all these permissions", Toast.LENGTH_SHORT);
@@ -968,7 +985,15 @@ public class MainActivity extends AppCompatActivity {
             // -f: write to a file
             // -v time: include timestamps
             // *:D : Capture everything from Debug level and up
-            String command = "logcat -f " + logFile.getAbsolutePath() + " RippleDrawable:S *:I -v time";
+            String[] command = {
+                    "logcat",
+                    "-f",
+                    logFile.getAbsolutePath(),
+                    "RippleDrawable:S", // First filter
+                    "*:I",              // Second filter
+                    "-v",
+                    "time"
+            };
 
             Runtime.getRuntime().exec(command);
 
@@ -1263,7 +1288,7 @@ public class MainActivity extends AppCompatActivity {
         if (!isAccessibilityServiceEnabled()) {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             startActivity(intent);
-            Toast.makeText(this, "Find and enable 'PayOff' here", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Find and enable 'PayOff' here", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -1793,16 +1818,16 @@ public class MainActivity extends AppCompatActivity {
                     hidePaymentProgress();
                     showFinalDialog(true, "USSD_SETUP_COMPLETE", false);
                 }else if(transaction_status.equals("-1")) {
-                    showFinalDialog(false, "You have exceeded your daily UPI transaction limit", false);
+                    showFinalDialog(false, "You have exceeded your daily UPI transaction limit.", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-2")) {
-                    showFinalDialog(false, "The UPI PIN entered is incorrect", false);
+                    showFinalDialog(false, "The UPI PIN entered is incorrect.", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-3")) {
-                    showFinalDialog(false, "Payment has timed out. Check if the money has been debited and retry if it hasn't", true);
+                    showFinalDialog(false, "Payment has timed out. Check if the money has been debited and retry if it hasn't.", true);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-4")) {
-                    showFinalDialog(false, "The amount entered is either invalid or too high", false);
+                    showFinalDialog(false, "The amount entered is either invalid or too high.", false);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-5")) {
                     System.out.println("USSD isn't set up!");
@@ -1811,13 +1836,19 @@ public class MainActivity extends AppCompatActivity {
                     curTransactionDetails.edit().putString("TRANSACTION_FINISH", "").apply();
                     loadingDialog.dismiss();
                 } else if(transaction_status.equals("-6")){
-                    showFinalDialog(false, "UPI ID (or) QR Code is not valid", true);
+                    showFinalDialog(false, "UPI ID (or) QR Code is not valid.", true);
                     hidePaymentProgress();
                 } else if(transaction_status.equals("-7")){
-                    showFinalDialog(false, "Your bank server is down at the moment", false);
+                    showFinalDialog(false, "Your bank server is down at the moment.", false);
+                    hidePaymentProgress();
+                } else if(transaction_status.equals("-8")) {
+                    showFinalDialog(false, "Transaction was force quit by user.", true);
+                    hidePaymentProgress();
+                } else if(transaction_status.equals("-9")){
+                    showFinalDialog(false, "The QR code is not a UPI QR code. Try using another UPI app if this was a mistake.", false);
                     hidePaymentProgress();
                 }else if (transaction_status.equals("-99")){
-                    showFinalDialog(false, "An unknown error occurred and the payment couldn't be processed", true);
+                    showFinalDialog(false, "An unknown error occurred and the payment couldn't be processed.", true);
                     hidePaymentProgress();
                 } else {
                     this.start();
@@ -2051,8 +2082,17 @@ public class MainActivity extends AppCompatActivity {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
                         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
                         WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+
+        ViewCompat.setOnApplyWindowInsetsListener(onTopView, (v, insets) -> {
+            v.setPadding(0, 0, 0, 0);
+            return insets;
+        });
 
         // 3. Add the view to the screen
         if (Settings.canDrawOverlays(this)) {

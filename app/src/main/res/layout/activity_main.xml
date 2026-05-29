@@ -5,56 +5,77 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/black">
+    android:background="@color/black"
+    android:theme="@style/Base.Theme.UssdUPI">
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/viewFinder"
+    <View
+        android:id="@+id/status_bar_below"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/viewFinderCard"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintHeight_percent="0.55"
+        app:cardPreventCornerOverlap="false"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_percent="0.60"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0">
+        app:layout_constraintVertical_bias="0"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.BottomRoundedCard"
+        app:strokeWidth="0dp">
 
-    </androidx.camera.view.PreviewView>
+        <androidx.camera.view.PreviewView
+            android:id="@+id/viewFinder"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </com.google.android.material.card.MaterialCardView>
+
 
     <LinearLayout
-        android:layout_width="325dp"
+        android:layout_width="340dp"
         android:layout_height="50dp"
-        app:layout_constraintEnd_toEndOf="@+id/viewFinder"
-        app:layout_constraintStart_toStartOf="@+id/viewFinder"
-        app:layout_constraintTop_toBottomOf="@+id/viewFinder"
-        android:layout_marginTop="50dp">
+        android:layout_marginTop="50dp"
+        app:layout_constraintEnd_toEndOf="@+id/viewFinderCard"
+        app:layout_constraintStart_toStartOf="@+id/viewFinderCard"
+        app:layout_constraintTop_toBottomOf="@+id/viewFinderCard">
+
         <EditText
             android:id="@+id/upiIDField"
-            android:layout_width="275dp"
+            android:layout_width="270dp"
             android:layout_height="50dp"
+            android:layout_marginLeft="5dp"
             android:hint="Mobile Number / UPI ID"
             android:inputType="text"
             android:textAlignment="center"
-            android:textColorHint="#CCCCCC"
-             />
+            android:textColorHint="#CCCCCC" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/button"
             android:layout_width="50dp"
             android:layout_height="50dp"
+            android:layout_marginLeft="9dp"
+            android:backgroundTint="@color/cardview_dark_background"
             android:clickable="true"
+            android:cropToPadding="false"
             android:enabled="true"
-            android:text="👤"
+            android:paddingEnd="17dp"
+            android:scaleType="fitCenter"
+            android:scaleX="1"
+            android:scaleY="1"
+            app:cornerRadius="9dp"
+            app:icon="@drawable/contacts_icon_512"
+            app:iconGravity="textStart"
             app:layout_constraintBottom_toBottomOf="@id/upiIDField"
             app:layout_constraintEnd_toEndOf="@+id/upiIDField"
             app:layout_constraintStart_toEndOf="@+id/upiIDField"
             app:layout_constraintTop_toTopOf="@+id/upiIDField" />
 
-        <TextView
-            android:id="@+id/textView5"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="👤" />
     </LinearLayout>
 
     <Button
@@ -64,18 +85,21 @@
         android:layout_marginTop="120dp"
         android:hapticFeedbackEnabled="true"
         android:text="Check Balance"
-        app:layout_constraintEnd_toEndOf="@+id/viewFinder"
-        app:layout_constraintStart_toStartOf="@+id/viewFinder"
-        app:layout_constraintTop_toBottomOf="@+id/viewFinder" />
+        app:cornerRadius="18dp"
+        app:layout_constraintEnd_toEndOf="@+id/viewFinderCard"
+        app:layout_constraintStart_toStartOf="@+id/viewFinderCard"
+        app:layout_constraintTop_toBottomOf="@+id/viewFinderCard" />
 
     <TextView
         android:id="@+id/signal_stats_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
         android:text="challagalestundi"
         android:textColor="#FFFFFF"
-        tools:layout_editor_absoluteX="20dp"
-        tools:layout_editor_absoluteY="20dp" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/status_bar_below" />
 
     <ImageButton
         android:id="@+id/settings_button"
@@ -88,7 +112,7 @@
         android:paddingRight="10dp"
         android:scaleType="fitCenter"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/status_bar_below"
         app:srcCompat="@drawable/settings_icon_512" />
 
     <ImageButton
@@ -130,6 +154,5 @@
         app:layout_constraintEnd_toEndOf="@id/show_qr_button"
         app:layout_constraintTop_toBottomOf="@id/show_qr_button"
         app:srcCompat="@drawable/torch_512" />
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>
