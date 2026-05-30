@@ -1,17 +1,8 @@
-package com.ipproject.ussdupi;
+package com.dhruvtej.payoff;
 
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
-import android.os.Build;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.os.VibratorManager;
-import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import com.google.mlkit.vision.barcode.BarcodeScanner;

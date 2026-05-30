@@ -1,17 +1,10 @@
-package com.ipproject.ussdupi;
+package com.dhruvtej.payoff;
 
-import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
-import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.util.Log;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
-
-import androidx.core.content.ContextCompat;
 
 public class USSDActions {
     Context context;

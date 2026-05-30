@@ -1,13 +1,10 @@
-package com.ipproject.ussdupi;
+package com.dhruvtej.payoff;
 
 import android.accessibilityservice.AccessibilityService;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,7 +20,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.util.Log;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -319,7 +315,7 @@ public class USSDAccessibility extends AccessibilityService {
                     intent.putExtra("message", "TRANSACTION_FINISH");
                     sendBroadcast(intent);
                     curTransactionDetails.edit().putString("TRANSACTION_FINISH", "1").apply();
-                    curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
+                    curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "100").apply();
                     //hidePaymentProgress();
                 }
             } else {
@@ -345,7 +341,6 @@ public class USSDAccessibility extends AccessibilityService {
             intent.putExtra("message", "TRANSACTION_FINISH");
             sendBroadcast(intent);
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "1").apply();
-            curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             //hidePaymentProgress();
         } else if (curScreenText.contains("Your account balance is")) {
             timerEnabled = false;
@@ -388,12 +383,18 @@ public class USSDAccessibility extends AccessibilityService {
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-6").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
             timerEnabled = false;
-        } else if(curScreenText.contains("Sorry, We are unable to process your request. Please try after sometime")){
+        } else if(curScreenText.contains("Sorry, We are unable to process your request. Please try after sometime")) {
             pressButton("Cancel", rootNode, 1);
             nextStep = "";
             curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-7").apply();
             curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
-            timerEnabled=false;
+            timerEnabled = false;
+        } else if(curScreenText.contains("Limit exceeded. Please try again after")){
+            pressButton("Cancel", rootNode, 1);
+            nextStep = "";
+            curTransactionDetails.edit().putString("TRANSACTION_FINISH", "-10").apply();
+            curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
+            timerEnabled = false;
         } else if(!curScreenText.contains("USSD code running…") || curScreenText.contains("Connection problem or invalid MMI code")){
             pressButton("OK", rootNode, 1);
             pressButton("Cancel", rootNode, 1);

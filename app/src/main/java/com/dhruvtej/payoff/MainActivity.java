@@ -1,4 +1,4 @@
-package com.ipproject.ussdupi;
+package com.dhruvtej.payoff;
 
 import android.Manifest;
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -12,10 +12,13 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.RenderEffect;
+import android.graphics.Shader;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -69,14 +72,17 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.content.res.AppCompatResources;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.CameraState;
 import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.CameraController;
+import androidx.camera.view.LifecycleCameraController;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -85,6 +91,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.interpolator.view.animation.FastOutLinearInInterpolator;
+import androidx.interpolator.view.animation.LinearOutSlowInInterpolator;
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 
@@ -120,6 +128,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -137,23 +146,28 @@ public class MainActivity extends AppCompatActivity {
     MaterialButton ussdSendButton;
     SharedPreferences curTransactionDetails, userSettings, encryptedPreferences;
     PreviewView cameraView;
-    boolean dialogBeingShown = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
+    boolean dialogBeingShown = false, userIsinMenu = false, paymentInProgress = false, dismissedDialog = false, accessibilityPermission = true, drawOverOtherAppsPermission = true, cameraPermission = true, callPermission = true, locationPermission = true, readPhoneStatePermission = true, contactsPermission = true;
     AlertDialog dialog, loadingDialog;
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
     private WindowManager windowManager;
     private View onTopView;
     ProgressBar progressBar;
+    ImageView blurFramePlaceholder;
     CountDownTimer checkForFinish, checkForQRScan, forceUPIID, paymentStartTimeout, signalCheck;
     TextView progressText, signalDebugText, forceStopText;
     Vibrator vibrator;
     Spinner spinner;
     TelephonyManager telephonyManager;
-    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false, biometricPINenabled = false, dualSIM = false;
+    ImageAnalysis imageAnalysis;
+    LifecycleCameraController cameraController;
+    CameraSelector cameraSelector;
+    Preview preview;
+    boolean useOnlyLTE = false, showingStats = false, torchOn = false, triggeredByContactsIntent = false, biometricPINenabled = false, dualSIM = false, cameraActive = false;
     LinkedList<Boolean> lteHistory = new LinkedList<>();
     Intent intent;
     String myUPIID, phNumURI;
-    int chosenSIM = -1;
+    int chosenSIM = -1, focusedCount = 0, unFocusedCount = 0;
     ValuePassHelper valuePassHelper;
     private ActivityResultLauncher<Intent> contactPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -226,7 +240,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         //checkForAllPermissions();
-        startCamera();
 
         checkForQRScan = new CountDownTimer(1, 1) {
             @Override
@@ -294,11 +307,15 @@ public class MainActivity extends AppCompatActivity {
         checkBalButton = findViewById(R.id.bal_button);
         signalDebugText = findViewById(R.id.signal_stats_text);
         cameraView = findViewById(R.id.viewFinder);
+        blurFramePlaceholder = findViewById(R.id.blur_image);
         signalDebugText.setVisibility(View.GONE);
         //pinTextField = findViewById(R.id.pinField);
         //amountTextField = findViewById(R.id.amountField);
 
         //sendValuesToUSSDClass(upiID, upiPIN, amount);
+
+        initCamera();
+        startCamera();
 
         String lteOnly1 = userSettings.getString("LTE_ONLY", "true");
         String showStats1 = userSettings.getString("SHOW_STATS", "false");
@@ -396,6 +413,9 @@ public class MainActivity extends AppCompatActivity {
             AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
             builder.setView(dialogBox);
             settingsMenu = builder.create();
+            dialogBox.setTranslationY(300f);
+            dialogBox.setAlpha(0f);
+            dialogBox.animate().translationY(0f).alpha(1f).setDuration(250).setInterpolator(new AccelerateInterpolator()).start();
             settingsMenu.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
             Switch lteOnlyToggle = dialogBox.findViewById(R.id.lteOnlyToggle);
@@ -491,9 +511,9 @@ public class MainActivity extends AppCompatActivity {
             biometricButton.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    showNewDialog("BIOMETRIC_PIN_SETUP", true);
                     settingsMenu.dismiss();
                     dialogBeingShown = false;
-                    showNewDialog("BIOMETRIC_PIN_SETUP", true);
                 }
             });
 
@@ -1387,12 +1407,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void startCamera() {
+    private boolean initCamera() {
+        cameraController = new LifecycleCameraController(this);
+        cameraController.bindToLifecycle(this);
+        cameraView.setController(cameraController);
+        if(cameraController!=null && cameraController.getCameraInfo()!=null){
+            return true;
+        }
         checkForAllPermissions();
-        /*curTransactionDetails.edit().putString("AMOUNT", "")
-                .putString("PAYEE_NAME", "")
-                .putString("UPI_PIN", "")
-                .putString("REMARK", "").apply();*/
+
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
                 ProcessCameraProvider.getInstance(this);
 
@@ -1401,30 +1424,56 @@ public class MainActivity extends AppCompatActivity {
                 cameraProvider = cameraProviderFuture.get();
 
                 // Preview configuration
-                Preview preview = new Preview.Builder().build();
+                preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(((PreviewView) findViewById(R.id.viewFinder)).getSurfaceProvider());
 
-                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
+                imageAnalysis = new ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build();
                 imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this), new QRScanner(this));
 
                 // Select back camera as default
-                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
+                cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
                 // Unbind use cases before rebinding
                 cameraProvider.unbindAll();
 
-                // Bind to lifecycle
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
                 camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
-
             } catch (Exception e) {
-                Log.e("CAMERA_DEBUG", "Use case binding failed", e);
+                e.printStackTrace();
             }
-
         }, ContextCompat.getMainExecutor(this));
+        return true;
+    }
 
+    private void startCamera() {
+
+        if(cameraProvider!=null && preview != null) {
+            cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+            camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
+        }
+
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    blurFramePlaceholder.setAlpha(1f);
+                    cameraView.setVisibility(View.VISIBLE);
+                    blurFramePlaceholder.animate()
+                            .alpha(0f)
+                            .setDuration(300)
+                            .setListener(null);
+                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            blurFramePlaceholder.setVisibility(View.GONE);
+                            blurFramePlaceholder.setRenderEffect(null);
+                        }
+                    }, 300);
+                }
+            }
+        }, 500);
     }
 
     private void toggleFlash(){
@@ -1435,8 +1484,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void pauseCamera(){
-        if(cameraProvider!=null)
+        if(cameraProvider!=null) {
             cameraProvider.unbindAll();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S /*&& cameraActive*/) {
+                Bitmap lastFrame = cameraView.getBitmap();
+                blurFramePlaceholder.setImageBitmap(lastFrame);
+                RenderEffect blurEffect = RenderEffect.createBlurEffect(50f, 50f, Shader.TileMode.CLAMP);
+                blurFramePlaceholder.setRenderEffect(blurEffect);
+                blurFramePlaceholder.setAlpha(0f);
+                blurFramePlaceholder.setVisibility(View.VISIBLE);
+                blurFramePlaceholder.animate()
+                                .alpha(1f)
+                                        .setDuration(300)
+                                                .setListener(null);
+                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        cameraView.setVisibility(View.GONE);;
+                    }
+                }, 300);
+            }
+        }
+        cameraActive = false;
     }
     private void showNewDialog(String mode, boolean textBoxIsPassword){
         if(dialogBeingShown && !mode.equals("PAYING")){
@@ -1448,6 +1517,7 @@ public class MainActivity extends AppCompatActivity {
         dialogBox.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setView(dialogBox);
+        dialog = builder.create();
         TextView secondSmallText = dialogBox.findViewById(R.id.text1);
         TextView secondBigText = dialogBox.findViewById(R.id.final_status_text);
         TextView firstSmallText = dialogBox.findViewById(R.id.status_text);
@@ -1457,6 +1527,18 @@ public class MainActivity extends AppCompatActivity {
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         mainButton = dialogBox.findViewById(R.id.settings_apply_button);
 
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        if(!mode.equals("PAYING") && !paymentInProgress && !isDestroyed() && !isFinishing()) {
+            dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
+            dialog.show();
+            dialogBeingShown = true;
+            if(dialog.getWindow()!=null){
+                dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+                dialog.getWindow().setWindowAnimations(0);
+            }
+        }
+
         if(textBoxIsPassword){
             textBox.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         } else {
@@ -1465,6 +1547,9 @@ public class MainActivity extends AppCompatActivity {
 
         if(mode.equals("AMOUNT")){
             vibrateWhenClicked();
+            dialogBox.setTranslationY(300f);
+            dialogBox.setAlpha(0f);
+            dialogBox.animate().translationY(0f).alpha(1f).setDuration(250).setInterpolator(new LinearOutSlowInInterpolator()).start();
             if(!amount.isEmpty()){
                 showNewDialog("PIN", true);
                 return;
@@ -1492,8 +1577,15 @@ public class MainActivity extends AppCompatActivity {
             mainButton.setVisibility(View.VISIBLE);
             mainButton.setText("PAY");
             textBox.setHint("PIN");
-            if(biometricPINenabled)
-                authenticateUser();
+            dialogBox.setTranslationX(300f);
+            dialogBox.setAlpha(0f);
+            dialogBox.animate().translationX(0f).alpha(1f).setDuration(125).setInterpolator(new FastOutLinearInInterpolator()).withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    if(biometricPINenabled)
+                        authenticateUser();
+                }
+            }).start();
         } else if(mode.equals("CHECK_BAL_PIN")){
             secondSmallText.setVisibility(View.GONE);
             secondBigText.setVisibility(View.GONE);
@@ -1503,8 +1595,15 @@ public class MainActivity extends AppCompatActivity {
             firstBigText.setText("PIN");
             firstSmallText.setText("Enter");
             textBox.setHint("PIN");
-            if(biometricPINenabled)
-                authenticateUser();
+            dialogBox.setTranslationY(300f);
+            dialogBox.setAlpha(0f);
+            dialogBox.animate().translationY(0f).alpha(1f).setDuration(125).setInterpolator(new FastOutLinearInInterpolator()).withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    if(biometricPINenabled)
+                        authenticateUser();
+                }
+            }).start();
         } else if(mode.equals("PAYING")){
             curTransactionDetails.edit().putString("UPI_ID", upiIDReadFromQR).apply();
         } else if(mode.equals("CARD_DIGITS")){
@@ -1559,7 +1658,7 @@ public class MainActivity extends AppCompatActivity {
             //}
         }, 150);
 
-        builder.setOnDismissListener(new DialogInterface.OnDismissListener() {
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
             @Override
             public void onDismiss(DialogInterface dialog) {
                 System.out.println("Dismiss listener called.");
@@ -1569,32 +1668,22 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
+        dialog.setOnCancelListener(new DialogInterface.OnCancelListener() {
             @Override
             public void onCancel(DialogInterface dialog) {
                 triggeredByContactsIntent = false;
                 dialogBeingShown = false;
+                userIsinMenu = false;
                 upiIDTextField.setText("");
                 System.out.println("User dismissed the dialog. Clearing current transaction info...");
                 curTransactionDetails.edit().remove("UPI_ID")
                         .remove("AMOUNT")
                         .remove("UPI_PIN")
                         .remove("REMARK").apply();
+                dialogBox.animate().translationY(-300f).alpha(0f).setDuration(250).setInterpolator(new FastOutLinearInInterpolator()).start();
             }
         });
 
-        dialog = builder.create();
-        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        if(!mode.equals("PAYING") && !paymentInProgress && !isDestroyed() && !isFinishing()) {
-            dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
-            dialog.show();
-            dialogBeingShown = true;
-            if(dialog.getWindow()!=null){
-                dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
-                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
-                dialog.getWindow().setWindowAnimations(0);
-            }
-        }
         textBox.setOnEditorActionListener((v, actionID, event) -> {
             if(actionID == EditorInfo.IME_ACTION_GO){
                 mainButton.performClick();
@@ -1604,12 +1693,18 @@ public class MainActivity extends AppCompatActivity {
         });
         mainButton.setOnClickListener(v -> {
             if(mode.equals("AMOUNT")){
+                userIsinMenu = true;
                 String newAmount = textBox.getText().toString();
                 if(Integer.parseInt(newAmount)>0) {
                     curTransactionDetails.edit().putString("AMOUNT", newAmount)
                             //.putString("UPI_ID", upiIDTextField.getText().toString())
                             .apply();
-                    showNewDialog("PIN", true);
+                    dialogBox.animate().translationX(-300f).alpha(0f).setDuration(125).setInterpolator(new FastOutLinearInInterpolator()).withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            showNewDialog("PIN", true);
+                        }
+                    }).start();
                 } else {
                     Toast.makeText(this, "Enter a valid amount.", Toast.LENGTH_SHORT).show();
                 }
@@ -1618,6 +1713,7 @@ public class MainActivity extends AppCompatActivity {
                     checkSIMs(true);
                     return;
                 }
+                userIsinMenu = true;
                 System.out.println("-----------------PAYMENT INITIATED-------------------");
                 userSettings.edit().putString("ACCESSIBILITY_ACTIVE", "true").apply();
                 broadcastAccessibility(true);
@@ -1827,7 +1923,18 @@ public class MainActivity extends AppCompatActivity {
                     }
                     int curPer = Integer.parseInt(progressBarStatus);
                     progressBar.setProgress(curPer, true);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        progressBar.setProgressTintList(ColorStateList.valueOf(Color.WHITE));
+                    }
+                    if(curPer==100){
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            progressBar.setProgressTintList(ColorStateList.valueOf(Color.rgb(0, 145, 0)));
+                        }
+                    }
                 } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        progressBar.setProgressTintList(ColorStateList.valueOf(Color.WHITE));
+                    }
                     if(!progressBar.isIndeterminate())
                         progressBar.setIndeterminate(true);
                 }
@@ -1838,8 +1945,14 @@ public class MainActivity extends AppCompatActivity {
                 if(transaction_status.equals("1")) {
                     System.out.println("Transaction complete!");
                     upiIDReadFromQR = "";
-                    hidePaymentProgress();
                     showFinalDialog(true, null, false);
+                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            hidePaymentProgress();
+                            curTransactionDetails.edit().putString("TRANSACTION_PROGRESS", "-1").apply();
+                        }
+                    }, 1);
                 } else if(transaction_status.equals("2")){
                     System.out.println("Balance check complete!");
                     hidePaymentProgress();
@@ -1875,8 +1988,11 @@ public class MainActivity extends AppCompatActivity {
                 } else if(transaction_status.equals("-8")) {
                     showFinalDialog(false, "Transaction was force quit by user.", true);
                     hidePaymentProgress();
-                } else if(transaction_status.equals("-9")){
+                } else if(transaction_status.equals("-9")) {
                     showFinalDialog(false, "The QR code is not a UPI QR code. Try using another UPI app if this was a mistake.", false);
+                    hidePaymentProgress();
+                } else if(transaction_status.equals("-10")){
+                    showFinalDialog(false, "Balance check limit exceeded. Try again after some time.", false);
                     hidePaymentProgress();
                 }else if (transaction_status.equals("-99")){
                     showFinalDialog(false, "An unknown error occurred and the payment couldn't be processed.", true);
@@ -1894,6 +2010,7 @@ public class MainActivity extends AppCompatActivity {
         System.out.println("-----------------PAYMENT FINISHED-------------------");
         phNumURI = "upi://pay?pa=";
         paymentInProgress = false;
+        userIsinMenu = false;
         triggeredByContactsIntent = false;
         forceUPIID.cancel();
         if(loadingDialog!=null)
@@ -1945,6 +2062,8 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                     }
+                } else if(message.equals("BAL_CHECK_COMPLETE")){
+                    smallText.setText("Balance check");
                 }
             } else {
                 writeToTransactionHistory(curTransactionDetails.getString("UPI_ID", "NULL"), curTransactionDetails.getString("PAYEE_NAME", "NULL"), amount, false, null);
@@ -1991,6 +2110,7 @@ public class MainActivity extends AppCompatActivity {
                 String balance = curTransactionDetails.getString("BALANCE", "?");
                 smallText.setText("Balance:");
                 statusText.setText("₹" + balance);
+                statusIcon.setImageResource(R.drawable.wallet_icon_512);
                 statusInfo.setVisibility(View.GONE);
                 secondSmallText.setVisibility(View.GONE);
                 secondBigText.setVisibility(View.GONE);
@@ -2034,6 +2154,12 @@ public class MainActivity extends AppCompatActivity {
                         .remove("UPI_PIN")
                         .remove("REMARK").apply();
                 phNumURI = "";
+                finalMessageBox.animate().translationY(-300f).alpha(0f).setDuration(250).setInterpolator(new FastOutLinearInInterpolator()).withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        dialog.dismiss();
+                    }
+                }).start();
             }
         });
 
@@ -2149,11 +2275,8 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            onTopView.animate()
-                    .alpha(1f)
-                    .setDuration(250)
-                    .setInterpolator(new AccelerateInterpolator())
-                    .start();
+            onTopView.setScaleX(1f);
+            onTopView.setScaleY(1f);
 
             if(customMessage.isEmpty())
                 progressText.setText("Payment in progress...");
@@ -2173,12 +2296,17 @@ public class MainActivity extends AppCompatActivity {
         if (windowManager != null && onTopView != null) {
             onTopView.animate()
                     .alpha(0f)
-                    .setDuration(250)
+                    .setDuration(200)
                     .setInterpolator(new AccelerateInterpolator())
+                    .withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            windowManager.removeView(onTopView);
+                            onTopView = null;
+                        }
+                    })
                     .start();
             unFullScreenUI();
-            windowManager.removeView(onTopView);
-            onTopView = null;
             paymentStartTimeout.cancel();
         }
     }
@@ -2217,6 +2345,7 @@ public class MainActivity extends AppCompatActivity {
         super.onWindowFocusChanged(focused);
         if(focused){
             System.out.println("Main activity is being focused.");
+            //showToast("Focus is TRUE: " + ++focusedCount, Toast.LENGTH_SHORT);
             new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override
                 public void run() {
@@ -2236,7 +2365,9 @@ public class MainActivity extends AppCompatActivity {
             }, 1000);
         } else {
             System.out.println("Main activity focus left.");
-            pauseCamera();
+            //showToast("Focus is FALSE: " + ++unFocusedCount, Toast.LENGTH_SHORT);
+            if(!paymentInProgress && !userIsinMenu)
+                pauseCamera();
             checkForQRScan.cancel();
         }
     }

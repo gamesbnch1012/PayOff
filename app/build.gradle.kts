@@ -3,15 +3,15 @@ plugins {
 }
 
 android {
-    namespace = "com.ipproject.ussdupi"
+    namespace = "com.dhruvtej.payoff"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.ipproject.ussdupi"
+        applicationId = "com.dhruvtej.payoff"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "d-1.09"
+        versionName = "d-1.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
